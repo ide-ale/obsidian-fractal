@@ -1,0 +1,2307 @@
+/* Styles for Fractal Obsidian Plugin */
+
+/* Flex container for the whole view content - keeps header static at the top */
+.fractal-view-content {
+	--fractal-zoom: 1.0;
+	--fractal-column-width: 450px;
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	overflow: hidden;
+	padding: 0 !important;
+	box-sizing: border-box;
+}
+
+/* Static Top Header Toolbar */
+.fractal-header-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 8px 16px;
+	background-color: #1a365d; /* Dark blue matching canvas theme */
+	border-bottom: 1px solid #2b6cb0;
+	height: 48px;
+	box-sizing: border-box;
+	z-index: 110;
+	flex-shrink: 0;
+}
+
+.fractal-toolbar-title {
+	font-weight: 600;
+	font-size: 1.1em;
+	color: #ffffff;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 500px; /* Increased from 250px to reserve more space */
+}
+
+.fractal-toolbar-controls {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+}
+
+.fractal-toolbar-slider-group {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 0.9em;
+	color: #bee3f8;
+}
+
+.fractal-toolbar-slider {
+	width: 100px;
+	height: 4px;
+	cursor: pointer;
+}
+
+.fractal-toolbar-buttons {
+	display: flex;
+	gap: 4px;
+}
+
+.fractal-toolbar-btn {
+	background: none;
+	border: none;
+	padding: 4px;
+	cursor: pointer;
+	color: #bee3f8;
+	border-radius: 4px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.fractal-toolbar-btn:hover {
+	background-color: #2b6cb0;
+	color: #ffffff;
+}
+
+.fractal-toolbar-btn svg {
+	width: 16px;
+	height: 16px;
+}
+
+/* Infinite Canvas Container - scrollable underneath the header */
+.fractal-view-container {
+	--zoom-factor: var(--fractal-zoom, 1.0);
+	--col-width: var(--fractal-column-width, 450px);
+	flex-grow: 1;
+	height: 0; /* allows flexbox container to scale scroll area correctly */
+	width: 100%;
+	overflow-x: auto;
+	overflow-y: auto;
+	background-color: #2b5c8f; /* Steel Blue background from screenshot */
+	font-family: var(--font-interface);
+	position: relative;
+	box-sizing: border-box;
+	
+	/* Scale font-size dynamically with zoom to shrink text proportional to cards */
+	font-size: calc(var(--fractal-text-size, var(--font-normal-size, 14px)) * var(--zoom-factor));
+	cursor: grab;
+}
+
+.fractal-view-container:active {
+	cursor: grabbing;
+}
+
+/* Floating Root Panel in top-left */
+.fractal-root-panel {
+	position: absolute;
+	top: 16px;
+	left: 16px;
+	z-index: 100;
+	background-color: #1a365d;
+	border: 1px solid #2b6cb0;
+	border-radius: 8px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+	width: 280px;
+	max-height: calc(100% - 32px);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	transition: width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), max-height 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+	box-sizing: border-box;
+	font-size: var(--font-normal-size, 14px) !important;
+	color: #bee3f8;
+}
+
+.fractal-root-panel.collapsed {
+	width: 200px;
+	max-height: 40px;
+}
+
+.fractal-root-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 8px 12px;
+	background-color: #22446a;
+	border-bottom: 1px solid #2b6cb0;
+	cursor: pointer;
+	min-height: 38px;
+	box-sizing: border-box;
+}
+
+.fractal-root-header-title {
+	font-weight: bold;
+	font-size: 0.85em;
+	color: #ffffff;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 130px;
+}
+
+.fractal-root-toggle-btn {
+	background: none;
+	border: none;
+	padding: 2px 6px;
+	font-size: 0.8em;
+	cursor: pointer;
+	color: #bee3f8;
+}
+
+.fractal-root-toggle-btn:hover {
+	color: #ffffff;
+}
+
+.fractal-root-body {
+	padding: 12px;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	font-size: 0.85em;
+	box-sizing: border-box;
+}
+
+.fractal-root-panel.collapsed .fractal-root-body {
+	display: none;
+}
+
+/* ---------------- Flat Column Layout (Gingko / Branch Writing style) ---------------- */
+.fractal-columns-container {
+	position: relative;
+	display: flex;
+	flex-direction: row;
+	align-items: center; /* Columns center vertically like Gingko/Branch Writing */
+	gap: calc(16px * var(--zoom-factor));
+	padding: calc(40px * var(--zoom-factor));
+	width: max-content;
+	min-width: 100%;
+	min-height: 100%;
+	box-sizing: border-box;
+}
+
+.fractal-columns-container::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	pointer-events: none;
+	z-index: 0;
+	background-image: 
+		linear-gradient(rgba(255, 255, 255, 1.0) 1px, transparent 1px),
+		linear-gradient(90deg, rgba(255, 255, 255, 1.0) 1px, transparent 1px);
+	background-size: calc(30px * var(--zoom-factor)) calc(30px * var(--zoom-factor));
+	opacity: var(--fractal-grid-opacity, 0.03);
+	display: var(--fractal-grid-display, block);
+}
+
+.fractal-column {
+	display: flex;
+	flex-direction: column;
+	gap: calc(6px * var(--zoom-factor));
+	width: calc(var(--col-width, 450px) * var(--zoom-factor));
+	flex-shrink: 0;
+	box-sizing: border-box;
+	position: relative;
+	transition: background-color 0.2s ease;
+}
+
+/* Drag-over column styling */
+.fractal-column.drag-over-list {
+	background-color: var(--background-modifier-hover) !important;
+	border-radius: 8px;
+	outline: 2px dashed var(--interactive-accent) !important;
+	outline-offset: -2px;
+	transition: background-color 0.15s ease, outline-color 0.15s ease;
+}
+
+/* Cards - Dimmed Steel Blue styling by default */
+.fractal-card {
+	background-color: #1a365d; /* Dark blue background for inactive cards */
+	border: 1px solid #2b6cb0; /* Lighter blue border */
+	border-radius: calc(8px * var(--zoom-factor));
+	padding: calc(var(--fractal-card-padding-y, 12px) * var(--zoom-factor)) calc(var(--fractal-card-padding-x, 14px) * var(--zoom-factor)) !important;
+	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+	position: relative;
+	cursor: pointer;
+	display: flex;
+	flex-direction: column;
+	gap: calc(var(--fractal-card-gap, 8px) * var(--zoom-factor)) !important;
+	box-sizing: border-box;
+	width: 100%; /* Fill column width */
+	flex-shrink: 0;
+	opacity: 0.6; /* Dimmed but readable */
+	transition: opacity 0.25s ease, transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, background-color 0.25s ease;
+}
+
+.fractal-card .fractal-card-title {
+	color: #ebf8ff; /* Light blue text for title */
+}
+
+.fractal-card .fractal-card-body {
+	color: #bee3f8; /* Muted light blue text for body */
+}
+
+.fractal-card:hover {
+	opacity: 0.85;
+	transform: translateY(-1px);
+}
+
+/* Node drag and drop ghost */
+.fractal-drag-ghost {
+	opacity: 0.8 !important;
+	transform: scale(1.02);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+	cursor: grabbing !important;
+}
+
+
+
+/* Drag-and-drop feedback styling */
+.fractal-card.dragging {
+	opacity: 0.45 !important;
+	border: calc(1.5px * var(--zoom-factor)) dashed var(--interactive-accent) !important;
+	background-color: var(--background-secondary-alt) !important;
+	transform: scale(0.98);
+}
+
+/* Clear old border-based styles to prevent layout shifting */
+.fractal-card.drag-over-top {
+	border-top: 1px solid var(--border-color, #2b6cb0) !important; /* Keep normal border size */
+}
+.fractal-card.drag-over-bottom {
+	border-bottom: 1px solid var(--border-color, #2b6cb0) !important; /* Keep normal border size */
+}
+
+/* Visual indicator for dropping a card inside another card as its child */
+.fractal-card.drag-over-middle {
+	outline: calc(2px * var(--zoom-factor)) dashed var(--interactive-accent) !important;
+	outline-offset: calc(-2px * var(--zoom-factor));
+	background-color: var(--background-modifier-hover) !important;
+	box-shadow: 0 0 calc(12px * var(--zoom-factor)) var(--interactive-accent);
+}
+
+/* Premium Insert-Indicator Lines and Glowing Dots */
+.fractal-card.drag-over-top::before {
+	content: "" !important;
+	position: absolute;
+	top: calc(-4px * var(--zoom-factor));
+	left: 0;
+	right: 0;
+	height: calc(6px * var(--zoom-factor));
+	background-color: var(--interactive-accent);
+	border-radius: calc(3px * var(--zoom-factor));
+	box-shadow: 0 0 calc(12px * var(--zoom-factor)) var(--interactive-accent), 0 0 calc(6px * var(--zoom-factor)) var(--interactive-accent);
+	z-index: 100;
+	pointer-events: none;
+	animation: pulseDragIndicator 1.5s infinite alternate;
+}
+
+.fractal-card.drag-over-top::after {
+	content: "" !important;
+	position: absolute;
+	top: calc(-8px * var(--zoom-factor));
+	left: calc(-4px * var(--zoom-factor));
+	width: calc(14px * var(--zoom-factor));
+	height: calc(14px * var(--zoom-factor));
+	background-color: var(--interactive-accent);
+	border: calc(3px * var(--zoom-factor)) solid var(--background-primary);
+	border-radius: 50%;
+	box-shadow: 0 0 calc(10px * var(--zoom-factor)) var(--interactive-accent);
+	z-index: 101;
+	pointer-events: none;
+	opacity: 1 !important;
+	transform: none !important;
+}
+
+.fractal-card.drag-over-bottom::before {
+	content: "" !important;
+	position: absolute;
+	bottom: calc(-4px * var(--zoom-factor));
+	left: 0;
+	right: 0;
+	height: calc(6px * var(--zoom-factor));
+	background-color: var(--interactive-accent);
+	border-radius: calc(3px * var(--zoom-factor));
+	box-shadow: 0 0 calc(12px * var(--zoom-factor)) var(--interactive-accent), 0 0 calc(6px * var(--zoom-factor)) var(--interactive-accent);
+	z-index: 100;
+	pointer-events: none;
+	animation: pulseDragIndicator 1.5s infinite alternate;
+}
+
+.fractal-card.drag-over-bottom::after {
+	content: "" !important;
+	position: absolute;
+	bottom: calc(-8px * var(--zoom-factor));
+	left: calc(-4px * var(--zoom-factor));
+	width: calc(14px * var(--zoom-factor));
+	height: calc(14px * var(--zoom-factor));
+	background-color: var(--interactive-accent);
+	border: calc(3px * var(--zoom-factor)) solid var(--background-primary);
+	border-radius: 50%;
+	box-shadow: 0 0 calc(10px * var(--zoom-factor)) var(--interactive-accent);
+	z-index: 101;
+	pointer-events: none;
+	opacity: 1 !important;
+	transform: none !important;
+}
+
+@keyframes pulseDragIndicator {
+	from {
+		opacity: 0.85;
+		box-shadow: 0 0 calc(8px * var(--zoom-factor)) var(--interactive-accent);
+	}
+	to {
+		opacity: 1;
+		box-shadow: 0 0 calc(16px * var(--zoom-factor)) var(--interactive-accent-hover, var(--interactive-accent));
+	}
+}
+
+/* Color Coding - Left borders matching palette images */
+.fractal-card.fractal-color-teal {
+	border-left: calc(6px * var(--zoom-factor)) solid #4d908e !important;
+}
+
+.fractal-card.fractal-color-blue {
+	border-left: calc(6px * var(--zoom-factor)) solid #3a86c8 !important;
+}
+
+.fractal-card.fractal-color-yellow {
+	border-left: calc(6px * var(--zoom-factor)) solid #ffbe0b !important;
+}
+
+.fractal-card.fractal-color-orange {
+	border-left: calc(6px * var(--zoom-factor)) solid #fb5607 !important;
+}
+
+.fractal-card.fractal-color-crimson {
+	border-left: calc(6px * var(--zoom-factor)) solid #C72C41 !important;
+}
+
+.fractal-card.fractal-color-purple {
+	border-left: calc(6px * var(--zoom-factor)) solid #8338ec !important;
+}
+
+.fractal-card.fractal-color-magenta {
+	border-left: calc(6px * var(--zoom-factor)) solid #A60054 !important;
+}
+
+.fractal-card.fractal-color-grey {
+	border-left: calc(6px * var(--zoom-factor)) solid #7f848f !important;
+}
+
+/* YAML Frontmatter Editor inside Root Panel */
+/* Clean Native Obsidian Style Properties */
+.fractal-yaml-container {
+	border-top: 1px solid var(--background-modifier-border);
+	margin-top: 12px;
+	padding-top: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.fractal-yaml-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 6px;
+}
+
+.fractal-yaml-header-title {
+	font-size: 0.85em;
+	font-weight: 600;
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+.fractal-yaml-edit-btn {
+	background: none;
+	border: none;
+	padding: 4px;
+	cursor: pointer;
+	color: var(--text-muted);
+	border-radius: 4px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.fractal-yaml-edit-btn:hover {
+	background-color: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.fractal-yaml-edit-btn svg {
+	width: 14px;
+	height: 14px;
+}
+
+.fractal-yaml-empty {
+	font-size: 0.85em;
+	color: var(--text-muted);
+	padding: 4px;
+}
+
+.fractal-yaml-table {
+	display: flex;
+	flex-direction: column;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	overflow: hidden;
+	background-color: var(--background-primary);
+}
+
+.fractal-yaml-row {
+	display: flex;
+	border-bottom: 1px solid var(--background-modifier-border);
+	align-items: stretch;
+	min-height: 32px;
+}
+
+.fractal-yaml-row:last-child {
+	border-bottom: none;
+}
+
+.fractal-yaml-key-container {
+	flex: 0 0 140px;
+	display: flex;
+	align-items: center;
+	padding: 6px 10px;
+	background-color: var(--background-secondary-alt);
+	border-right: 1px solid var(--background-modifier-border);
+	color: var(--text-semibold);
+	font-size: 0.85em;
+	gap: 6px;
+	user-select: none;
+	overflow: hidden;
+}
+
+.fractal-yaml-key-icon svg {
+	width: 13px !important;
+	height: 13px !important;
+	color: var(--text-muted);
+	display: block;
+}
+
+.fractal-yaml-key-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.fractal-yaml-value-container {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	padding: 6px 12px;
+	font-size: 0.85em;
+	color: var(--text-normal);
+	min-width: 0;
+	background-color: var(--background-primary);
+}
+
+.fractal-yaml-value-text {
+	word-break: break-word;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.fractal-yaml-tags-wrapper {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+
+.fractal-yaml-tag-pill {
+	background-color: var(--tag-background, rgba(99, 179, 237, 0.15));
+	color: var(--tag-color, var(--text-accent));
+	border: var(--tag-border, none);
+	border-radius: 12px;
+	padding: 2px 8px;
+	font-size: 0.85em;
+	font-weight: 500;
+	line-height: 1.2;
+}
+
+/* Card Header & Body */
+.fractal-card-title {
+	font-weight: 600;
+	font-size: calc(var(--fractal-title-size, 16px) * var(--zoom-factor)) !important;
+	margin: 0;
+	word-break: break-word;
+}
+
+.fractal-card-body {
+	font-size: 0.9em;
+	line-height: 1.4;
+	word-break: break-word;
+	flex-grow: 1;
+}
+
+.fractal-card .markdown-preview-view,
+.fractal-card .markdown-preview-sizer,
+.fractal-card .markdown-rendered,
+.fractal-card .markdown-preview-section {
+	padding: 0 !important;
+	margin: 0 !important;
+	max-width: 100% !important;
+	width: 100% !important;
+	min-height: unset !important;
+	background-color: transparent !important;
+	background: transparent !important;
+	border: none !important;
+	box-shadow: none !important;
+}
+
+.fractal-card-body p {
+	margin-top: 0;
+	margin-bottom: 8px;
+}
+
+.fractal-card-body p:last-child {
+	margin-bottom: 0;
+}
+
+/* Trim margins of first and last elements in the card body to prevent top/bottom gap leaking */
+.fractal-card-body > *:first-child,
+.fractal-card-body .markdown-preview-section > div:first-child > *:first-child {
+	margin-top: 0 !important;
+}
+
+.fractal-card-body > *:last-child,
+.fractal-card-body .markdown-preview-section > div:last-child > *:last-child {
+	margin-bottom: 0 !important;
+}
+
+/* Edit Mode Textarea */
+.fractal-card-edit-title {
+	font-weight: 600;
+	font-size: 1.05em;
+	width: 100%;
+	background-color: #22446a;
+	border: 1px solid #2b6cb0;
+	border-radius: 4px;
+	color: #ffffff;
+	padding: 6px;
+	box-sizing: border-box;
+	margin-bottom: 6px;
+}
+
+.fractal-card-edit-body {
+	font-family: var(--font-monospace);
+	font-size: 0.9em;
+	width: 100%;
+	min-height: 120px;
+	background-color: #22446a;
+	border: 1px solid #2b6cb0;
+	border-radius: 4px;
+	color: #ffffff;
+	padding: 8px;
+	box-sizing: border-box;
+	resize: vertical;
+}
+
+.fractal-card-edit-title:focus, .fractal-card-edit-body:focus {
+	outline: none;
+	border-color: #63b3ed;
+}
+
+/* Ensure edit fields remain readable inside active/illuminated cards */
+.fractal-card.active .fractal-card-edit-title,
+.fractal-card.active .fractal-card-edit-body,
+.fractal-card.illuminated .fractal-card-edit-title,
+.fractal-card.illuminated .fractal-card-edit-body {
+	color: #ffffff !important;
+	background-color: #1a365d !important;
+	border-color: #63b3ed !important;
+}
+
+/* Card edit actions layout */
+.fractal-card-edit-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 4px;
+}
+
+.fractal-card-edit-actions .view-note-btn {
+	background: transparent !important;
+	border: none !important;
+	padding: 4px !important;
+	cursor: pointer;
+	color: var(--text-muted) !important;
+	opacity: 0.6;
+	transition: opacity 0.2s ease, color 0.2s ease;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.fractal-card-edit-actions .view-note-btn:hover {
+	opacity: 1;
+	color: var(--interactive-accent) !important;
+}
+
+.fractal-card-edit-actions .view-note-btn svg {
+	width: 14px;
+	height: 14px;
+}
+
+/* Card Add Sibling and Child Overlay Buttons (Zero-height hovering to prevent layout shifts) */
+.fractal-add-sibling-btn-container {
+	display: block;
+	width: 100%;
+	height: 0;
+	position: relative;
+	z-index: 10;
+	opacity: 0;
+	transition: opacity 0.2s ease;
+}
+
+.fractal-column:hover .fractal-add-sibling-btn-container {
+	opacity: 0.35;
+}
+
+.fractal-add-sibling-btn-container:hover {
+	opacity: 1 !important;
+}
+
+.fractal-add-sibling-btn-container.always-visible {
+	opacity: 1;
+	height: 20px;
+	margin: 6px 0;
+}
+
+.fractal-add-sibling-btn {
+	position: absolute;
+	top: -4px;
+	left: 0;
+	width: 100%;
+	height: 8px;
+	background-color: transparent;
+	border: 1px dashed var(--background-modifier-border);
+	border-radius: 3px;
+	cursor: pointer;
+	box-sizing: border-box;
+	transition: background-color 0.15s ease, border-color 0.15s ease, height 0.15s ease, top 0.15s ease;
+}
+
+.fractal-add-sibling-btn-container.always-visible .fractal-add-sibling-btn {
+	position: relative;
+	top: 0;
+	height: 20px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--text-muted);
+	font-size: 11px;
+}
+
+.fractal-add-sibling-btn:hover {
+	background-color: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+	border-style: solid;
+	height: 10px;
+	top: -5px;
+}
+
+/* Link Indicators */
+.fractal-link-resolved {
+	color: #bee3f8;
+	text-decoration: underline;
+}
+
+.fractal-link-unresolved {
+	color: #e53e3e;
+	text-decoration: underline dashed;
+	opacity: 0.85;
+}
+
+/* Collapsible state indicators (placed in bottom-right corner) */
+.fractal-collapsed-indicator {
+	position: absolute;
+	bottom: 6px;
+	right: 6px;
+	font-size: 0.85em;
+	color: var(--text-muted) !important;
+	background-color: transparent !important;
+	border: 1px solid transparent !important;
+	border-radius: 4px;
+	padding: 2px 6px;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	pointer-events: none;
+	z-index: 5;
+}
+
+.fractal-indicator-icon svg {
+	width: 15px !important;
+	height: 15px !important;
+	display: inline-block;
+	vertical-align: middle;
+	color: var(--text-muted) !important;
+}
+
+
+/* Smooth column appearance */
+.fractal-column {
+	animation: fractalColumnFadeIn 0.18s ease-out;
+}
+
+@keyframes fractalColumnFadeIn {
+	from {
+		opacity: 0;
+		transform: translateX(12px) scale(0.98);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0) scale(1);
+	}
+}
+
+/* Styling for preview column and its cards to indicate they are selectable child pages */
+.preview-column .fractal-card {
+	background-color: rgba(26, 54, 93, 0.35) !important;
+	border: 1px dashed rgba(43, 108, 176, 0.5) !important;
+	opacity: 0.65;
+	transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.preview-column .fractal-card:hover {
+	opacity: 0.95;
+	background-color: rgba(26, 54, 93, 0.6) !important;
+	border: 1px solid #63b3ed !important;
+	box-shadow: 0 0 15px rgba(99, 179, 237, 0.25);
+	transform: translateX(6px); /* Indication of entering deeper hierarchy */
+}
+
+/* Subtle arrows indicating child preview cards are clickable */
+.preview-column .fractal-card::after {
+	content: "→";
+	position: absolute;
+	right: 12px;
+	top: 50%;
+	transform: translateY(-50%);
+	color: #63b3ed;
+	font-weight: bold;
+	opacity: 0;
+	transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.preview-column .fractal-card:hover::after {
+	opacity: 1;
+	transform: translateY(-50%) translateX(2px);
+}
+
+/* Toolbar Title and Info Group */
+.fractal-toolbar-title-group {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.fractal-toolbar-btn.meta-toggle-btn.active {
+	color: var(--text-accent, #63b3ed);
+	background-color: rgba(99, 179, 237, 0.15);
+}
+
+/* Toolbar Dropdowns and Color Pickers */
+.fractal-toolbar-select {
+	background-color: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	color: var(--text-normal);
+	border-radius: 4px;
+	padding: 4px 6px;
+	font-size: 0.85em;
+	cursor: pointer;
+	outline: none;
+	height: 28px;
+	box-sizing: border-box;
+}
+
+.fractal-toolbar-select:focus {
+	border-color: var(--interactive-accent);
+}
+
+.fractal-toolbar-color-picker {
+	width: 24px;
+	height: 24px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	background: none;
+	cursor: pointer;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+.custom-color-pickers {
+	display: flex;
+	align-items: center;
+	gap: 6px !important;
+}
+
+/* Two-Column Metadata Panel (YAML & Intro) */
+.fractal-metadata-panel {
+	background-color: var(--background-secondary-alt);
+	border-bottom: 1px solid var(--background-modifier-border);
+	padding: 16px;
+	display: flex;
+	flex-direction: row;
+	gap: 24px;
+	box-sizing: border-box;
+	transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+	max-height: 400px;
+	overflow-y: auto;
+	opacity: 1;
+	flex-shrink: 0;
+}
+
+.fractal-metadata-panel.collapsed {
+	max-height: 0;
+	padding-top: 0;
+	padding-bottom: 0;
+	border-bottom-width: 0;
+	overflow: hidden;
+	opacity: 0;
+}
+
+.fractal-metadata-column {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+}
+
+.fractal-metadata-title {
+	font-weight: bold;
+	font-size: 0.9em;
+	color: var(--text-normal);
+	border-bottom: 1px solid var(--background-modifier-border);
+	padding-bottom: 4px;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.fractal-metadata-body {
+	flex-grow: 1;
+	overflow-y: auto;
+	box-sizing: border-box;
+}
+
+.fractal-card-edit-body-rich,
+.fractal-card-edit-body-raw {
+	min-height: 50px;
+	padding: 8px 12px;
+	background-color: transparent;
+	border-radius: 4px;
+	border: none;
+	font-family: var(--font-text);
+	font-size: inherit;
+	line-height: 1.5;
+	color: inherit;
+	white-space: pre-wrap;
+	word-wrap: break-word;
+}
+
+.fractal-card-edit-body-raw {
+	width: 100%;
+	resize: none;
+	overflow: hidden;
+	box-sizing: border-box;
+}
+
+.fractal-card-edit-body-rich:focus,
+.fractal-card-edit-body-raw:focus {
+	outline: none;
+	box-shadow: inset 0 0 0 2px var(--interactive-accent);
+}
+
+.fractal-root-content-body {
+	padding: 8px;
+	background-color: var(--background-primary-alt);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	min-height: 120px;
+	cursor: text;
+	overflow-y: auto;
+}
+
+/* Wikilinks/Internal Links styling like native Obsidian */
+.fractal-card a.internal-link {
+	color: var(--link-color, var(--interactive-accent));
+	text-decoration: var(--link-decoration, none);
+	cursor: pointer;
+	font-weight: var(--link-weight, normal);
+}
+
+.fractal-card a.internal-link:hover {
+	color: var(--link-color-hover, var(--interactive-accent-hover));
+	text-decoration: underline;
+}
+
+.fractal-card a.internal-link.is-unresolved {
+	color: var(--link-unresolved-color, #a8a8a8);
+	opacity: 0.7;
+}
+
+/* ---------------- Obsidian Active Theme Replication ---------------- */
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-view-container {
+	background-color: var(--background-secondary) !important;
+}
+
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-columns-container::before {
+	background-image: radial-gradient(var(--text-normal) 1px, transparent 1px) !important;
+}
+
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-card {
+	background-color: var(--background-primary-alt) !important;
+	border: 1px solid var(--background-modifier-border) !important;
+	opacity: 0.65;
+}
+
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-card .fractal-card-title {
+	background-color: transparent !important;
+	border-bottom: none !important;
+}
+
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-card .fractal-card-body {
+	color: var(--text-muted) !important;
+}
+
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-card.active {
+	opacity: 1 !important;
+	background-color: var(--background-primary) !important;
+	border: 2px solid var(--interactive-accent) !important;
+	box-shadow: 0 0 12px var(--interactive-accent) !important;
+}
+
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-card.active .fractal-card-body,
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-card.illuminated .fractal-card-body {
+	color: var(--text-normal) !important;
+}
+
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-card.illuminated {
+	opacity: 0.9 !important;
+	background-color: var(--background-primary) !important;
+	border: 1px solid var(--interactive-accent) !important;
+}
+
+/* Section title colors by heading level in obsidian-theme and default fallbacks */
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-column[data-level="1"] .fractal-card-title,
+.fractal-view-content:not([data-theme]) .fractal-column[data-level="1"] .fractal-card-title {
+	color: var(--h1-color, var(--text-accent, var(--text-normal))) !important;
+}
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-column[data-level="2"] .fractal-card-title,
+.fractal-view-content:not([data-theme]) .fractal-column[data-level="2"] .fractal-card-title {
+	color: var(--h2-color, var(--text-accent, var(--text-normal))) !important;
+}
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-column[data-level="3"] .fractal-card-title,
+.fractal-view-content:not([data-theme]) .fractal-column[data-level="3"] .fractal-card-title {
+	color: var(--h3-color, var(--text-accent, var(--text-normal))) !important;
+}
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-column[data-level="4"] .fractal-card-title,
+.fractal-view-content:not([data-theme]) .fractal-column[data-level="4"] .fractal-card-title {
+	color: var(--h4-color, var(--text-accent, var(--text-normal))) !important;
+}
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-column[data-level="5"] .fractal-card-title,
+.fractal-view-content:not([data-theme]) .fractal-column[data-level="5"] .fractal-card-title {
+	color: var(--h5-color, var(--text-accent, var(--text-normal))) !important;
+}
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-column[data-level="6"] .fractal-card-title,
+.fractal-view-content:not([data-theme]) .fractal-column[data-level="6"] .fractal-card-title {
+	color: var(--h6-color, var(--text-accent, var(--text-normal))) !important;
+}
+
+.fractal-view-content[data-theme="obsidian-theme"] .preview-column .fractal-card {
+	background-color: var(--background-secondary-alt) !important;
+	border: 1px dashed var(--background-modifier-border) !important;
+	opacity: 0.5;
+}
+
+.fractal-view-content[data-theme="obsidian-theme"] .preview-column .fractal-card:hover {
+	opacity: 0.85;
+	border-style: solid !important;
+}
+
+/* ---------------- Custom User Theme ---------------- */
+.fractal-view-content[data-theme="custom"] .fractal-view-container {
+	background-color: var(--fractal-custom-canvas-bg, #0d1b2a) !important;
+}
+
+.fractal-view-content[data-theme="custom"] .fractal-columns-container::before {
+	background-image: radial-gradient(#ffffff 1px, transparent 1px) !important;
+}
+
+.fractal-view-content[data-theme="custom"] .fractal-card {
+	background-color: var(--fractal-custom-inactive-bg, #1a365d) !important;
+	border: 1px solid rgba(255, 255, 255, 0.15) !important;
+	opacity: 0.65;
+}
+
+.fractal-view-content[data-theme="custom"] .fractal-card,
+.fractal-view-content[data-theme="custom"] .fractal-card * {
+	color: var(--fractal-custom-text-color, #eef1f6) !important;
+}
+
+.fractal-view-content[data-theme="custom"] .fractal-card .fractal-card-title,
+.fractal-view-content[data-theme="custom"] .fractal-card .fractal-card-title * {
+	background-color: transparent !important;
+	border-bottom: none !important;
+	color: var(--fractal-custom-title-color, #ebf8ff) !important;
+}
+
+.fractal-view-content[data-theme="custom"] .fractal-card.active {
+	opacity: 1 !important;
+	background-color: var(--fractal-custom-active-bg, #ffffff) !important;
+	border: 2px solid var(--fractal-custom-aura-color, var(--interactive-accent, #63b3ed)) !important;
+	box-shadow: 0 0 15px var(--fractal-custom-aura-color, rgba(255, 255, 255, 0.4)) !important;
+	--text-normal: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c)) !important;
+	--text-muted: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #4a5568)) !important;
+	--callout-text-color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c)) !important;
+}
+
+.fractal-view-content[data-theme="custom"] .fractal-card.illuminated {
+	opacity: 0.9 !important;
+	background-color: var(--fractal-custom-active-bg, #ffffff) !important;
+	border: 1.5px solid var(--fractal-custom-aura-color, rgba(255, 255, 255, 0.4)) !important;
+	--text-normal: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c)) !important;
+	--text-muted: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #4a5568)) !important;
+	--callout-text-color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c)) !important;
+}
+
+.fractal-view-content[data-theme="custom"] .fractal-card.active,
+.fractal-view-content[data-theme="custom"] .fractal-card.active *:not(a):not(.callout-title):not(.callout-icon),
+.fractal-view-content[data-theme="custom"] .fractal-card.illuminated,
+.fractal-view-content[data-theme="custom"] .fractal-card.illuminated *:not(a):not(.callout-title):not(.callout-icon) {
+	color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c)) !important;
+}
+
+/* Custom theme variables scoped to preview engines and callout containers to prevent themes from leaking light text */
+.fractal-view-content[data-theme="custom"] .fractal-card .markdown-preview-view,
+.fractal-view-content[data-theme="custom"] .fractal-card .markdown-rendered,
+.fractal-view-content[data-theme="custom"] .fractal-card .callout {
+	--text-normal: var(--fractal-custom-text-color, #eef1f6) !important;
+	--text-muted: var(--fractal-custom-text-color, #a0aec0) !important;
+	--callout-text-color: var(--fractal-custom-text-color, #eef1f6) !important;
+}
+
+.fractal-view-content[data-theme="custom"] .fractal-card.active .markdown-preview-view,
+.fractal-view-content[data-theme="custom"] .fractal-card.active .markdown-rendered,
+.fractal-view-content[data-theme="custom"] .fractal-card.active .callout,
+.fractal-view-content[data-theme="custom"] .fractal-card.illuminated .markdown-preview-view,
+.fractal-view-content[data-theme="custom"] .fractal-card.illuminated .markdown-rendered,
+.fractal-view-content[data-theme="custom"] .fractal-card.illuminated .callout {
+	--text-normal: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c)) !important;
+	--text-muted: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #4a5568)) !important;
+	--callout-text-color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c)) !important;
+}
+
+.fractal-view-content[data-theme="custom"] .preview-column .fractal-card {
+	background-color: var(--fractal-custom-inactive-bg, #1a365d) !important;
+	border: 1px dashed rgba(255, 255, 255, 0.2) !important;
+	opacity: 0.5;
+}
+
+.fractal-view-content[data-theme="custom"] .preview-column .fractal-card:hover {
+	opacity: 0.85;
+	border-style: solid !important;
+}
+
+/* Sub-card references indicator styling for Custom Theme */
+.fractal-view-content[data-theme="custom"] .fractal-collapsed-indicator {
+	background-color: transparent !important;
+	border: 1px solid transparent !important;
+	color: var(--fractal-custom-text-color) !important;
+	padding: 3px 7px !important;
+}
+
+.fractal-view-content[data-theme="custom"] .fractal-collapsed-indicator .fractal-indicator-icon svg {
+	color: var(--fractal-custom-text-color) !important;
+	width: 15px !important;
+	height: 15px !important;
+}
+
+/* Table Transparency for Classic and Custom Themes */
+.fractal-view-content:not([data-theme="obsidian-theme"]) .fractal-card table,
+.fractal-view-content:not([data-theme="obsidian-theme"]) .fractal-card thead,
+.fractal-view-content:not([data-theme="obsidian-theme"]) .fractal-card tbody,
+.fractal-view-content:not([data-theme="obsidian-theme"]) .fractal-card tr,
+.fractal-view-content:not([data-theme="obsidian-theme"]) .fractal-card th,
+.fractal-view-content:not([data-theme="obsidian-theme"]) .fractal-card td,
+.fractal-view-content:not([data-theme="obsidian-theme"]) .fractal-root-content-body table,
+.fractal-view-content:not([data-theme="obsidian-theme"]) .fractal-root-content-body thead,
+.fractal-view-content:not([data-theme="obsidian-theme"]) .fractal-root-content-body tbody,
+.fractal-view-content:not([data-theme="obsidian-theme"]) .fractal-root-content-body tr,
+.fractal-view-content:not([data-theme="obsidian-theme"]) .fractal-root-content-body th,
+.fractal-view-content:not([data-theme="obsidian-theme"]) .fractal-root-content-body td {
+	background-color: transparent !important;
+	background: transparent !important;
+}
+
+/* Table Border colors for Custom Theme */
+.fractal-view-content[data-theme="custom"] .fractal-card table,
+.fractal-view-content[data-theme="custom"] .fractal-card th,
+.fractal-view-content[data-theme="custom"] .fractal-card td,
+.fractal-view-content[data-theme="custom"] .fractal-root-content-body table,
+.fractal-view-content[data-theme="custom"] .fractal-root-content-body th,
+.fractal-view-content[data-theme="custom"] .fractal-root-content-body td {
+	border-color: var(--fractal-custom-text-color) !important;
+}
+
+/* Callout Body Text Color overrides (applies card text color to callout content text while keeping semantic title colors) */
+/* Custom Theme - Inactive Cards Callout Text & Variable Overrides */
+.fractal-view-content[data-theme="custom"] .fractal-card .callout-content,
+.fractal-view-content[data-theme="custom"] .fractal-card .callout-content *,
+.fractal-view-content[data-theme="custom"] .fractal-root-content-body .callout-content,
+.fractal-view-content[data-theme="custom"] .fractal-root-content-body .callout-content * {
+	--text-normal: var(--fractal-custom-text-color, #eef1f6) !important;
+	--text-muted: var(--fractal-custom-text-color, #a0aec0) !important;
+	--text-faint: var(--fractal-custom-text-color, #a0aec0) !important;
+	--callout-text-color: var(--fractal-custom-text-color, #eef1f6) !important;
+	--list-marker-color: var(--fractal-custom-text-color, #eef1f6) !important;
+	--checkbox-color: var(--fractal-custom-text-color, #eef1f6) !important;
+	--checkbox-border-color: var(--fractal-custom-text-color, #eef1f6) !important;
+	--checkbox-marker-color: var(--fractal-custom-inactive-bg, #ffffff) !important;
+}
+.fractal-view-content[data-theme="custom"] .fractal-card .callout-content *:not(a),
+.fractal-view-content[data-theme="custom"] .fractal-root-content-body .callout-content *:not(a) {
+	color: var(--fractal-custom-text-color) !important;
+}
+
+/* Custom Theme - Active/Illuminated Cards Callout Text & Variable Overrides */
+.fractal-view-content[data-theme="custom"] .fractal-card.active .callout-content,
+.fractal-view-content[data-theme="custom"] .fractal-card.active .callout-content *,
+.fractal-view-content[data-theme="custom"] .fractal-card.illuminated .callout-content,
+.fractal-view-content[data-theme="custom"] .fractal-card.illuminated .callout-content * {
+	--text-normal: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c)) !important;
+	--text-muted: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #4a5568)) !important;
+	--text-faint: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #4a5568)) !important;
+	--callout-text-color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c)) !important;
+	--list-marker-color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c)) !important;
+	--checkbox-color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c)) !important;
+	--checkbox-border-color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c)) !important;
+	--checkbox-marker-color: var(--fractal-custom-active-bg, #ffffff) !important;
+}
+.fractal-view-content[data-theme="custom"] .fractal-card.active .callout-content *:not(a),
+.fractal-view-content[data-theme="custom"] .fractal-card.illuminated .callout-content *:not(a) {
+	color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c)) !important;
+}
+
+/* Toolbar Popover Menu */
+.fractal-popover-wrapper {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+}
+
+.fractal-popover-menu {
+	position: absolute;
+	top: calc(100% + 6px); /* 6px gap directly below the button */
+	right: 0;              /* Align to the right edge of the wrapper */
+	background-color: var(--background-secondary-alt);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	padding: 12px;
+	box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+	z-index: 1000;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	min-width: 250px;
+	animation: popoverFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes popoverFadeIn {
+	from { opacity: 0; transform: translateY(-4px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+
+.fractal-popover-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	font-size: 0.9em;
+	color: var(--text-muted);
+}
+
+/* 8 Preset Color Swatches */
+.fractal-custom-colors-container {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	border-top: 1px solid var(--background-modifier-border);
+	padding-top: 8px;
+	margin-top: 4px;
+}
+
+.fractal-custom-tabs-row {
+	display: flex;
+	justify-content: space-between;
+	gap: 4px;
+	margin-bottom: 8px;
+	width: 100%;
+}
+
+.fractal-custom-tab-btn {
+	flex: 1;
+	padding: 4px 2px;
+	font-size: 0.75em;
+	font-weight: 600;
+	text-align: center;
+	background-color: var(--background-secondary);
+	color: var(--text-muted);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	cursor: pointer;
+	transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+	box-shadow: none;
+}
+
+.fractal-custom-tab-btn:hover {
+	background-color: var(--background-modifier-hover);
+	color: var(--text-normal);
+	border-color: var(--background-modifier-border-hover);
+}
+
+.fractal-custom-tab-btn.active {
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent, #ffffff) !important;
+	border-color: var(--interactive-accent);
+}
+
+.fractal-custom-palettes-container {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	width: 100%;
+}
+
+.fractal-custom-palette-row {
+	display: flex;
+	gap: 5px;
+	width: 100%;
+}
+
+.fractal-custom-swatch {
+	flex: 1;
+	height: 20px;
+	border-radius: 2px;
+	border: 1px solid rgba(128, 128, 128, 0.4);
+	cursor: pointer;
+	box-sizing: border-box;
+	transition: transform 0.15s ease;
+}
+
+.fractal-custom-swatch:hover {
+	transform: scale(1.25);
+	border-color: var(--text-normal);
+	box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+	z-index: 1;
+}
+
+.fractal-custom-swatch.active {
+	transform: scale(1.1);
+	outline: 2px solid var(--interactive-accent, #63b3ed);
+	outline-offset: 1px;
+	border-color: transparent;
+	z-index: 2;
+}
+
+/* Image and media boundaries inside cards */
+.fractal-card img,
+.fractal-card video,
+.fractal-card iframe,
+.fractal-card .internal-embed,
+.fractal-card .internal-embed img,
+.fractal-card .internal-embed video {
+	max-width: 100% !important;
+	height: auto !important;
+	object-fit: contain !important;
+	display: block;
+	border-radius: 4px;
+	box-sizing: border-box;
+}
+
+/* Child Addition Button on the right of the card */
+.fractal-card-add-child-btn {
+	position: absolute;
+	right: -4px; /* Let it sit exactly on the right border */
+	top: 0;
+	height: 100%;
+	width: 8px;
+	border-radius: 0 4px 4px 0; /* Match the right corners of the card */
+	background-color: transparent;
+	border: 1px dashed var(--background-modifier-border);
+	border-left: none; /* Align snugly with the card's right border */
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	z-index: 100;
+	opacity: 0;
+	transition: opacity 0.2s ease, background-color 0.15s ease, border-color 0.15s ease, width 0.15s ease, right 0.15s ease;
+}
+
+.fractal-card:hover .fractal-card-add-child-btn {
+	opacity: 0.5; /* Show slightly on card hover */
+}
+
+.fractal-card-add-child-btn:hover {
+	opacity: 1 !important;
+	background-color: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+	border-style: solid;
+	width: 12px;
+	right: -8px; /* Expand outward slightly on hover */
+}
+
+/* Autocomplete suggestion popup styles */
+.fractal-autocomplete-popup {
+	background-color: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+	max-height: 200px;
+	overflow-y: auto;
+	width: 280px;
+	padding: 4px 0;
+	z-index: 2000;
+}
+
+.fractal-autocomplete-item {
+	padding: 6px 12px;
+	font-size: 0.9em;
+	color: var(--text-normal);
+	cursor: pointer;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.fractal-autocomplete-item:hover,
+.fractal-autocomplete-item.active {
+	background-color: var(--background-modifier-hover);
+	color: var(--text-accent);
+}
+
+/* Open in native Obsidian editor button styling */
+.fractal-card-edit-native-btn {
+	background-color: transparent;
+	border: 1px solid var(--interactive-accent);
+	color: var(--text-accent);
+	border-radius: 4px;
+	padding: 4px 8px;
+	cursor: pointer;
+	font-size: 0.85em;
+	transition: background-color 0.15s ease, color 0.15s ease;
+	margin-right: auto; /* push save/cancel to the right */
+}
+
+.fractal-card-edit-native-btn:hover {
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent, #ffffff);
+}
+
+/* Active toolbar button highlight */
+.fractal-toolbar-btn.active {
+	color: var(--text-accent, #63b3ed) !important;
+	background-color: rgba(99, 179, 237, 0.15) !important;
+}
+
+/* Spacer for smooth vertical alignment in centered navigation mode */
+.fractal-column-spacer {
+	width: 100%;
+	height: 0px;
+	flex-shrink: 0;
+	transition: height 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* Rich text editor container (Live Preview simulation) */
+.fractal-card-edit-body-rich {
+	font-family: inherit;
+	font-size: 0.9em;
+	width: 100%;
+	min-height: 120px;
+	background-color: #22446a;
+	border: 1px solid #2b6cb0;
+	border-radius: 4px;
+	color: #ffffff;
+	padding: 8px;
+	box-sizing: border-box;
+	overflow-y: auto;
+	word-wrap: break-word;
+	white-space: pre-wrap;
+	text-align: left;
+}
+
+.fractal-card-edit-body-rich:focus {
+	outline: none;
+	border-color: #63b3ed;
+}
+
+.fractal-card.active .fractal-card-edit-body-rich,
+.fractal-card.illuminated .fractal-card-edit-body-rich {
+	color: #ffffff !important;
+	background-color: #1a365d !important;
+	border-color: #63b3ed !important;
+}
+
+.fractal-card-edit-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 4px;
+	background-color: var(--background-secondary);
+	border: 1px solid var(--border-color);
+	border-radius: 4px;
+	color: var(--text-muted);
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+
+.fractal-card-edit-btn:hover {
+	background-color: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.fractal-card-edit-btn.save:hover {
+	background-color: var(--background-modifier-success);
+	border-color: var(--background-modifier-success);
+	color: white;
+}
+
+.fractal-card-edit-btn.cancel:hover {
+	background-color: var(--background-modifier-error);
+	border-color: var(--background-modifier-error);
+	color: white;
+}
+
+.fractal-card-edit-btn.delete:hover {
+	background-color: #e53e3e;
+	border-color: #e53e3e;
+	color: white;
+}
+
+.fractal-card-edit-btn.open-native:hover {
+	background-color: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+	color: white;
+}
+
+/* Live Preview Dynamic Formatting Styles */
+.fractal-card-edit-body-rich .formatting {
+	display: none;
+}
+
+.fractal-card-edit-body-rich .fractal-formatted.active-format > .formatting {
+	display: inline;
+	opacity: 0.5;
+	color: var(--text-faint);
+}
+
+.fractal-card-edit-body-rich .link-text {
+	color: var(--link-color);
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+.fractal-card-edit-body-rich .fractal-formatted.internal-link.active-format > .link-text {
+	text-decoration: none;
+}
+
+/* Ensure formatting tags are properly styled in the editor */
+.fractal-card-edit-body-rich strong {
+	font-weight: bold !important;
+}
+
+.fractal-card-edit-body-rich em {
+	font-style: italic !important;
+}
+
+.fractal-card-edit-body-rich mark {
+	background-color: var(--text-highlight-bg);
+}
+
+.fractal-card-edit-body-rich del {
+	text-decoration: line-through;
+}
+
+/* Markdown rendering improvements: Tables, Callouts, Blockquotes & Lists */
+
+/* Allow horizontal scrolling for wide content (tables) */
+.fractal-card-body {
+	overflow-x: auto !important;
+}
+
+/* ====== TABLES ====== */
+.fractal-card-body table {
+	width: 100% !important;
+	max-width: 100% !important;
+	table-layout: fixed !important;
+	word-break: break-word !important;
+	border-collapse: collapse !important;
+	margin: 12px 0 !important;
+	font-size: inherit !important;
+	background-color: transparent !important;
+	background: transparent !important;
+}
+
+.fractal-card-body th,
+.fractal-card-body td {
+	padding: 4px 8px !important;
+	border: 1px solid var(--background-modifier-border, rgba(255,255,255,0.15)) !important;
+	text-align: left !important;
+	word-break: break-word !important;
+	white-space: normal !important;
+	overflow-wrap: break-word !important;
+	font-size: inherit !important;
+	color: inherit !important;
+	background-color: transparent !important;
+	background: transparent !important;
+}
+
+.fractal-card-body th {
+	background-color: transparent !important;
+	background: transparent !important;
+	font-weight: 600 !important;
+}
+
+.fractal-card-body table,
+.fractal-card-body thead,
+.fractal-card-body tbody,
+.fractal-card-body tr {
+	background-color: transparent !important;
+	background: transparent !important;
+}
+
+/* ====== BLOCKQUOTES ====== */
+.fractal-card-body blockquote {
+	margin: 8px 0 !important;
+	padding: 4px 0 4px 12px !important;
+	border-left: 3px solid var(--interactive-accent, #7c8ed6) !important;
+	background-color: transparent !important;
+	color: inherit !important;
+}
+
+/* ====== CALLOUTS (Obsidian-style) ====== */
+.fractal-card-body .callout {
+	margin: 8px 0 !important;
+	padding: 8px 12px !important;
+	border-radius: 6px !important;
+	border: 0 !important;
+	border-left: 4px solid var(--callout-color, var(--interactive-accent, #7c8ed6)) !important;
+	background-color: rgba(var(--callout-color-rgb, 124, 142, 214), 0.1) !important;
+	color: inherit !important;
+}
+
+.fractal-card-body .callout .callout-title {
+	display: flex !important;
+	align-items: center !important;
+	gap: 6px !important;
+	font-weight: 600 !important;
+	margin-bottom: 4px !important;
+	color: var(--callout-color, var(--interactive-accent, #7c8ed6)) !important;
+}
+
+.fractal-card-body .callout .callout-content {
+	color: inherit !important;
+}
+
+/* High-specificity overrides to force callouts and all their inner elements (except links) to inherit parent card colors */
+body.theme-dark .fractal-view-content .fractal-card .fractal-card-body .callout,
+body.theme-dark .fractal-view-content .fractal-card .fractal-card-body .callout-content,
+body.theme-light .fractal-view-content .fractal-card .fractal-card-body .callout,
+body.theme-light .fractal-view-content .fractal-card .fractal-card-body .callout-content,
+body.theme-dark .fractal-view-content .fractal-root-content-body .callout,
+body.theme-dark .fractal-view-content .fractal-root-content-body .callout-content,
+body.theme-light .fractal-view-content .fractal-root-content-body .callout,
+body.theme-light .fractal-view-content .fractal-root-content-body .callout-content {
+	color: inherit !important;
+}
+
+body.theme-dark .fractal-view-content .fractal-card .fractal-card-body .callout-content *:not(a),
+body.theme-light .fractal-view-content .fractal-card .fractal-card-body .callout-content *:not(a),
+body.theme-dark .fractal-view-content .fractal-root-content-body .callout-content *:not(a),
+body.theme-light .fractal-view-content .fractal-root-content-body .callout-content *:not(a) {
+	color: inherit !important;
+}
+
+/* Callout type colors - abstract/summary/tldr */
+.fractal-card-body .callout[data-callout="abstract"],
+.fractal-card-body .callout[data-callout="summary"],
+.fractal-card-body .callout[data-callout="tldr"] {
+	border-left-color: #00bcd4 !important;
+	background-color: rgba(0, 188, 212, 0.08) !important;
+}
+.fractal-card-body .callout[data-callout="abstract"] .callout-title,
+.fractal-card-body .callout[data-callout="summary"] .callout-title,
+.fractal-card-body .callout[data-callout="tldr"] .callout-title {
+	color: #00bcd4 !important;
+}
+
+/* info/todo */
+.fractal-card-body .callout[data-callout="info"],
+.fractal-card-body .callout[data-callout="todo"] {
+	border-left-color: #448aff !important;
+	background-color: rgba(68, 138, 255, 0.08) !important;
+}
+.fractal-card-body .callout[data-callout="info"] .callout-title,
+.fractal-card-body .callout[data-callout="todo"] .callout-title {
+	color: #448aff !important;
+}
+
+/* tip/hint/important */
+.fractal-card-body .callout[data-callout="tip"],
+.fractal-card-body .callout[data-callout="hint"],
+.fractal-card-body .callout[data-callout="important"] {
+	border-left-color: #00bfa5 !important;
+	background-color: rgba(0, 191, 165, 0.08) !important;
+}
+.fractal-card-body .callout[data-callout="tip"] .callout-title,
+.fractal-card-body .callout[data-callout="hint"] .callout-title,
+.fractal-card-body .callout[data-callout="important"] .callout-title {
+	color: #00bfa5 !important;
+}
+
+/* warning/caution/attention */
+.fractal-card-body .callout[data-callout="warning"],
+.fractal-card-body .callout[data-callout="caution"],
+.fractal-card-body .callout[data-callout="attention"] {
+	border-left-color: #ff9100 !important;
+	background-color: rgba(255, 145, 0, 0.08) !important;
+}
+.fractal-card-body .callout[data-callout="warning"] .callout-title,
+.fractal-card-body .callout[data-callout="caution"] .callout-title,
+.fractal-card-body .callout[data-callout="attention"] .callout-title {
+	color: #ff9100 !important;
+}
+
+/* danger/error/bug */
+.fractal-card-body .callout[data-callout="danger"],
+.fractal-card-body .callout[data-callout="error"],
+.fractal-card-body .callout[data-callout="bug"] {
+	border-left-color: #ff5252 !important;
+	background-color: rgba(255, 82, 82, 0.08) !important;
+}
+.fractal-card-body .callout[data-callout="danger"] .callout-title,
+.fractal-card-body .callout[data-callout="error"] .callout-title,
+.fractal-card-body .callout[data-callout="bug"] .callout-title {
+	color: #ff5252 !important;
+}
+
+/* example */
+.fractal-card-body .callout[data-callout="example"] {
+	border-left-color: #7c4dff !important;
+	background-color: rgba(124, 77, 255, 0.08) !important;
+}
+.fractal-card-body .callout[data-callout="example"] .callout-title {
+	color: #7c4dff !important;
+}
+
+/* note */
+.fractal-card-body .callout[data-callout="note"] {
+	border-left-color: #448aff !important;
+	background-color: rgba(68, 138, 255, 0.08) !important;
+}
+.fractal-card-body .callout[data-callout="note"] .callout-title {
+	color: #448aff !important;
+}
+
+/* question/help/faq */
+.fractal-card-body .callout[data-callout="question"],
+.fractal-card-body .callout[data-callout="help"],
+.fractal-card-body .callout[data-callout="faq"] {
+	border-left-color: #ff9100 !important;
+	background-color: rgba(255, 145, 0, 0.08) !important;
+}
+.fractal-card-body .callout[data-callout="question"] .callout-title,
+.fractal-card-body .callout[data-callout="help"] .callout-title,
+.fractal-card-body .callout[data-callout="faq"] .callout-title {
+	color: #ff9100 !important;
+}
+
+/* success/check/done */
+.fractal-card-body .callout[data-callout="success"],
+.fractal-card-body .callout[data-callout="check"],
+.fractal-card-body .callout[data-callout="done"] {
+	border-left-color: #00c853 !important;
+	background-color: rgba(0, 200, 83, 0.08) !important;
+}
+.fractal-card-body .callout[data-callout="success"] .callout-title,
+.fractal-card-body .callout[data-callout="check"] .callout-title,
+.fractal-card-body .callout[data-callout="done"] .callout-title {
+	color: #00c853 !important;
+}
+
+/* failure/fail/missing */
+.fractal-card-body .callout[data-callout="failure"],
+.fractal-card-body .callout[data-callout="fail"],
+.fractal-card-body .callout[data-callout="missing"] {
+	border-left-color: #ff5252 !important;
+	background-color: rgba(255, 82, 82, 0.08) !important;
+}
+.fractal-card-body .callout[data-callout="failure"] .callout-title,
+.fractal-card-body .callout[data-callout="fail"] .callout-title,
+.fractal-card-body .callout[data-callout="missing"] .callout-title {
+	color: #ff5252 !important;
+}
+
+/* quote/cite */
+.fractal-card-body .callout[data-callout="quote"],
+.fractal-card-body .callout[data-callout="cite"] {
+	border-left-color: #9e9e9e !important;
+	background-color: rgba(158, 158, 158, 0.08) !important;
+}
+.fractal-card-body .callout[data-callout="quote"] .callout-title,
+.fractal-card-body .callout[data-callout="cite"] .callout-title {
+	color: #9e9e9e !important;
+}
+
+/* ====== LISTS ====== */
+.fractal-card-body ul,
+.fractal-card-body ol {
+	padding-left: 20px !important;
+	margin: 6px 0 !important;
+}
+
+.fractal-card-body li {
+	margin-bottom: 2px !important;
+}
+
+/* ====== TASK LISTS ====== */
+.fractal-card-body .contains-task-list {
+	list-style: none !important;
+	padding-left: 6px !important;
+}
+
+.fractal-card-body .task-list-item {
+	display: flex !important;
+	align-items: baseline !important;
+	gap: 4px !important;
+}
+
+.fractal-card-body .task-list-item-checkbox {
+	margin: 0 4px 0 0 !important;
+	cursor: default !important;
+}
+
+/* ====== CODE BLOCKS ====== */
+.fractal-card-body pre {
+	margin: 8px 0 !important;
+	padding: 8px !important;
+	border-radius: 4px !important;
+	overflow-x: auto !important;
+	font-size: 0.85em !important;
+}
+
+.fractal-card-body code {
+	font-size: 0.9em !important;
+}
+
+/* ====== MATH (MathJax/KaTeX) ====== */
+.fractal-card-body .math,
+.fractal-card-body .MathJax,
+.fractal-card-body mjx-container {
+	overflow-x: auto !important;
+}
+
+/* ====== INLINE EDITOR (MarkdownView) ====== */
+.lineage-inline-editor {
+    width: 100%;
+    height: auto;
+    min-height: 100px;
+}
+.lineage-inline-editor .view-header,
+.lineage-inline-editor .inline-title,
+.lineage-inline-editor .embedded-backlinks,
+.lineage-inline-editor .cm-gutters {
+    display: none !important;
+}
+.lineage-inline-editor .cm-editor .cm-scroller {
+    padding: 6px !important;
+    padding-bottom: 10px !important;
+    padding-left: 12px !important;
+}
+.lineage-inline-editor .cm-contentContainer div {
+    padding-bottom: 0 !important;
+}
+
+.lineage-inline-editor {
+    --file-line-width: 100%;
+}
+
+/* ====== PROPERTIES NATIVE EDITOR (YAML Source Editor) ====== */
+.fractal-yaml-native-editor {
+    background-color: var(--background-primary) !important;
+    border: 2px solid var(--interactive-accent) !important;
+    border-radius: 6px;
+    padding: 8px !important;
+    box-sizing: border-box;
+}
+
+.fractal-view-content[data-theme="classic"] .fractal-yaml-native-editor,
+.fractal-view-content:not([data-theme]) .fractal-yaml-native-editor {
+    background-color: #ffffff !important;
+    border-color: #ffffff !important;
+    color: #1a202c !important;
+}
+
+.fractal-view-content[data-theme="custom"] .fractal-yaml-native-editor {
+    background-color: var(--fractal-custom-active-bg, #ffffff) !important;
+    border: 2px solid var(--fractal-custom-aura-color, #63b3ed) !important;
+    box-shadow: 0 0 15px var(--fractal-custom-aura-color, rgba(255, 255, 255, 0.4)) !important;
+    color: var(--fractal-custom-active-text, #1a202c) !important;
+}
+
+/* ====== METADATA NOTE INTRODUCTION EDITOR IN EDIT MODE ====== */
+.fractal-metadata-body .lineage-inline-editor {
+    background-color: var(--background-primary) !important;
+    border: 2px solid var(--interactive-accent) !important;
+    border-radius: 6px;
+    padding: 8px !important;
+    box-sizing: border-box;
+}
+
+.fractal-view-content[data-theme="classic"] .fractal-metadata-body .lineage-inline-editor,
+.fractal-view-content:not([data-theme]) .fractal-metadata-body .lineage-inline-editor {
+    background-color: #ffffff !important;
+    border-color: #ffffff !important;
+    color: #1a202c !important;
+}
+
+.fractal-view-content[data-theme="custom"] .fractal-metadata-body .lineage-inline-editor {
+    background-color: var(--fractal-custom-active-bg, #ffffff) !important;
+    border: 2px solid var(--fractal-custom-aura-color, #63b3ed) !important;
+    box-shadow: 0 0 15px var(--fractal-custom-aura-color, rgba(255, 255, 255, 0.4)) !important;
+    color: var(--fractal-custom-active-text, #1a202c) !important;
+}
+
+/* ====== METADATA PANEL & PROPERTIES VIEW THEME COMPATIBILITY ====== */
+
+/* --- Classic Theme --- */
+.fractal-view-content[data-theme="classic"] .fractal-metadata-panel,
+.fractal-view-content:not([data-theme]) .fractal-metadata-panel {
+    background-color: #112239 !important;
+    border-bottom: 1px solid #2b6cb0 !important;
+    color: #bee3f8 !important;
+}
+.fractal-view-content[data-theme="classic"] .fractal-metadata-title,
+.fractal-view-content:not([data-theme]) .fractal-metadata-title {
+    color: #ffffff !important;
+    border-bottom-color: #2b6cb0 !important;
+}
+.fractal-view-content[data-theme="classic"] .fractal-root-content-body,
+.fractal-view-content:not([data-theme]) .fractal-root-content-body {
+    background-color: #1a365d !important;
+    border: 1px solid #2b6cb0 !important;
+    color: #bee3f8 !important;
+}
+.fractal-view-content[data-theme="classic"] .fractal-yaml-container,
+.fractal-view-content:not([data-theme]) .fractal-yaml-container {
+    color: #bee3f8 !important;
+    border-top-color: rgba(43, 108, 176, 0.4) !important;
+}
+.fractal-view-content[data-theme="classic"] .fractal-yaml-table,
+.fractal-view-content:not([data-theme]) .fractal-yaml-table {
+    border-color: #2b6cb0 !important;
+    background-color: #1a365d !important;
+}
+.fractal-view-content[data-theme="classic"] .fractal-yaml-row,
+.fractal-view-content:not([data-theme]) .fractal-yaml-row {
+    border-bottom-color: rgba(43, 108, 176, 0.4) !important;
+}
+.fractal-view-content[data-theme="classic"] .fractal-yaml-key-container,
+.fractal-view-content:not([data-theme]) .fractal-yaml-key-container {
+    background-color: #112239 !important;
+    border-right-color: #2b6cb0 !important;
+    color: #ffffff !important;
+}
+.fractal-view-content[data-theme="classic"] .fractal-yaml-value-container,
+.fractal-view-content:not([data-theme]) .fractal-yaml-value-container {
+    background-color: #1a365d !important;
+    color: #bee3f8 !important;
+}
+.fractal-view-content[data-theme="classic"] .fractal-yaml-key-text,
+.fractal-view-content:not([data-theme]) .fractal-yaml-key-text {
+    color: #ebf8ff !important;
+}
+.fractal-view-content[data-theme="classic"] .fractal-yaml-tag-pill,
+.fractal-view-content:not([data-theme]) .fractal-yaml-tag-pill {
+    background-color: #22446a !important;
+    color: #bee3f8 !important;
+    border: 1px solid #2b6cb0 !important;
+}
+.fractal-view-content[data-theme="classic"] .fractal-yaml-edit-btn,
+.fractal-view-content[data-theme="classic"] .fractal-column-collapse-btn,
+.fractal-view-content:not([data-theme]) .fractal-yaml-edit-btn,
+.fractal-view-content:not([data-theme]) .fractal-column-collapse-btn {
+    color: #bee3f8 !important;
+}
+.fractal-view-content[data-theme="classic"] .fractal-yaml-edit-btn:hover,
+.fractal-view-content[data-theme="classic"] .fractal-column-collapse-btn:hover,
+.fractal-view-content:not([data-theme]) .fractal-yaml-edit-btn:hover,
+.fractal-view-content:not([data-theme]) .fractal-column-collapse-btn:hover {
+    color: #ffffff !important;
+    background-color: #2b6cb0 !important;
+}
+
+/* --- Custom Theme --- */
+.fractal-view-content[data-theme="custom"] .fractal-metadata-panel {
+    background-color: var(--fractal-custom-canvas-bg) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important;
+    color: var(--fractal-custom-text-color) !important;
+}
+.fractal-view-content[data-theme="custom"] .fractal-metadata-title {
+    color: var(--fractal-custom-text-color) !important;
+    border-bottom-color: rgba(255, 255, 255, 0.15) !important;
+}
+.fractal-view-content[data-theme="custom"] .fractal-root-content-body {
+    background-color: var(--fractal-custom-inactive-bg) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    color: var(--fractal-custom-text-color) !important;
+}
+.fractal-view-content[data-theme="custom"] .fractal-yaml-container {
+    color: var(--fractal-custom-text-color) !important;
+    border-top-color: rgba(255, 255, 255, 0.15) !important;
+}
+.fractal-view-content[data-theme="custom"] .fractal-yaml-table {
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    background-color: var(--fractal-custom-inactive-bg) !important;
+}
+.fractal-view-content[data-theme="custom"] .fractal-yaml-row {
+    border-bottom-color: rgba(255, 255, 255, 0.15) !important;
+}
+.fractal-view-content[data-theme="custom"] .fractal-yaml-key-container {
+    background-color: rgba(0, 0, 0, 0.15) !important;
+    border-right-color: rgba(255, 255, 255, 0.15) !important;
+    color: var(--fractal-custom-text-color) !important;
+}
+.fractal-view-content[data-theme="custom"] .fractal-yaml-value-container {
+    background-color: var(--fractal-custom-inactive-bg) !important;
+    color: var(--fractal-custom-text-color) !important;
+}
+.fractal-view-content[data-theme="custom"] .fractal-yaml-key-text {
+    color: var(--fractal-custom-text-color) !important;
+    opacity: 0.9;
+}
+.fractal-view-content[data-theme="custom"] .fractal-yaml-tag-pill {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    color: var(--fractal-custom-text-color) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+.fractal-view-content[data-theme="custom"] .fractal-yaml-edit-btn,
+.fractal-view-content[data-theme="custom"] .fractal-column-collapse-btn {
+    color: var(--fractal-custom-text-color) !important;
+    opacity: 0.8;
+}
+.fractal-view-content[data-theme="custom"] .fractal-yaml-edit-btn:hover,
+.fractal-view-content[data-theme="custom"] .fractal-column-collapse-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    opacity: 1;
+}
+
+/* --- Obsidian Theme --- */
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-metadata-panel {
+    background-color: var(--background-secondary-alt) !important;
+    border-bottom: 1px solid var(--background-modifier-border) !important;
+    color: var(--text-normal) !important;
+}
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-metadata-title {
+    color: var(--text-normal) !important;
+    border-bottom-color: var(--background-modifier-border) !important;
+}
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-root-content-body {
+    background-color: var(--background-primary-alt) !important;
+    border: 1px solid var(--background-modifier-border) !important;
+    color: var(--text-normal) !important;
+}
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-yaml-container {
+    color: var(--text-normal) !important;
+    border-top-color: var(--background-modifier-border) !important;
+}
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-yaml-table {
+    border-color: var(--background-modifier-border) !important;
+    background-color: var(--background-primary) !important;
+}
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-yaml-row {
+    border-bottom-color: var(--background-modifier-border) !important;
+}
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-yaml-key-container {
+    background-color: var(--background-secondary-alt) !important;
+    border-right-color: var(--background-modifier-border) !important;
+    color: var(--text-semibold) !important;
+}
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-yaml-value-container {
+    background-color: var(--background-primary) !important;
+    color: var(--text-normal) !important;
+}
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-yaml-key-text {
+    color: var(--text-normal) !important;
+}
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-yaml-tag-pill {
+    background-color: var(--background-secondary) !important;
+    color: var(--text-normal) !important;
+    border: 1px solid var(--background-modifier-border) !important;
+}
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-yaml-edit-btn,
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-column-collapse-btn {
+    color: var(--text-muted) !important;
+}
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-yaml-edit-btn:hover,
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-column-collapse-btn:hover {
+    color: var(--text-normal) !important;
+    background-color: var(--background-modifier-hover) !important;
+}
+
+/* Transparent background for inline CodeMirror editors to inherit card backgrounds */
+.lineage-inline-editor .markdown-source-view,
+.lineage-inline-editor .cm-editor,
+.lineage-inline-editor .cm-scroller {
+    background-color: transparent !important;
+}
+.lineage-inline-editor,
+.lineage-inline-editor .cm-editor,
+.lineage-inline-editor .cm-editor .cm-content,
+.lineage-inline-editor .cm-scroller {
+    color: inherit !important;
+}
+
+/* Edit and formatting toolbar inside controls */
+.fractal-header-edit-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.fractal-edit-toolbar-group {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	background-color: rgba(255, 255, 255, 0.05);
+	padding: 4px 8px;
+	border-radius: 4px;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.fractal-toolbar-info-text {
+	font-size: 0.85em;
+	color: #a0aec0;
+	font-style: italic;
+}
+
+.fractal-toolbar-divider {
+	width: 1px;
+	height: 16px;
+	background-color: rgba(255, 255, 255, 0.15);
+	margin: 0 4px;
+}
+
+/* Specific button overrides inside edit toolbar */
+.fractal-edit-toolbar-group .fractal-toolbar-btn {
+	background: transparent;
+	border: none;
+	padding: 4px;
+	border-radius: 3px;
+	color: #eef1f6;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	transition: background-color 0.15s, color 0.15s;
+}
+
+.fractal-edit-toolbar-group .fractal-toolbar-btn:hover {
+	background-color: rgba(255, 255, 255, 0.1);
+	color: #ffffff;
+}
+
+.fractal-edit-toolbar-group .fractal-toolbar-btn.delete-btn:hover {
+	background-color: rgba(229, 62, 62, 0.2);
+	color: #fc8181;
+}
+
+.fractal-edit-toolbar-group .fractal-toolbar-btn.save-btn {
+	background-color: rgba(72, 187, 120, 0.2);
+	color: #68d391;
+	border: 1px solid rgba(72, 187, 120, 0.3);
+}
+
+.fractal-edit-toolbar-group .fractal-toolbar-btn.save-btn:hover {
+	background-color: rgba(72, 187, 120, 0.3);
+	color: #ffffff;
+}
+
+.fractal-edit-toolbar-group .fractal-toolbar-btn.cancel-btn:hover {
+	background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Custom theme mode overrides */
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-edit-toolbar-group {
+	background-color: var(--background-secondary-alt);
+	border: 1px solid var(--background-modifier-border);
+}
+
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-edit-toolbar-group .fractal-toolbar-btn {
+	color: var(--text-normal);
+}
+
+.fractal-view-content[data-theme="obsidian-theme"] .fractal-edit-toolbar-group .fractal-toolbar-btn:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+/* Custom height for inactive cards */
+.fractal-card:not(.active):not(.illuminated) {
+	height: var(--fractal-inactive-card-height, auto);
+	max-height: var(--fractal-inactive-card-height, auto);
+	overflow: hidden;
+}
+
+/* Popover Controls Layout */
+.fractal-popover-controls {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.fractal-toolbar-number-input {
+	width: 55px;
+	padding: 2px 6px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	background-color: var(--background-primary);
+	color: var(--text-normal);
+	font-family: inherit;
+	font-size: 0.9em;
+	text-align: right;
+}
+
+.fractal-toolbar-number-input:focus {
+	outline: 1px solid var(--interactive-accent);
+	border-color: var(--interactive-accent);
+}
+
+.fractal-toolbar-number-input:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+	background-color: var(--background-secondary-alt);
+}
+
+/* Hide spin buttons for clean layout */
+.fractal-toolbar-number-input::-webkit-outer-spin-button,
+.fractal-toolbar-number-input::-webkit-inner-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+.fractal-toolbar-number-input {
+	-moz-appearance: textfield;
+}
+
+.fractal-popover-unit {
+	font-size: 0.85em;
+	color: var(--text-muted);
+	margin-left: 2px;
+	width: 15px;
+	display: inline-block;
+	text-align: left;
+}
+
+.fractal-popover-checkbox {
+	margin-right: 4px;
+	cursor: pointer;
+}
+
+.fractal-popover-checkbox-label {
+	font-size: 0.9em;
+	color: var(--text-muted);
+	margin-right: 6px;
+	cursor: pointer;
+	user-select: none;
+}
+
+.fractal-popover-group-header {
+	font-size: 0.72em;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--text-muted);
+	margin-top: 14px;
+	margin-bottom: 8px;
+	padding-left: 6px;
+	border-left: 2px solid var(--interactive-accent);
+	line-height: 1.2;
+}
+
+.fractal-popover-group-header:first-of-type {
+	margin-top: 2px;
+}
+
+.fractal-popover-divider {
+	border: none;
+	border-top: 1px solid var(--background-modifier-border, rgba(255, 255, 255, 0.08));
+	margin: 12px 0;
+	width: 100%;
+}
+
+/* Mobile & narrow screen responsive layout */
+@media (max-width: 768px) {
+	.fractal-header-toolbar {
+		height: auto;
+		min-height: 48px;
+		flex-wrap: wrap;
+		gap: 8px;
+		padding: 8px 10px;
+	}
+
+	.fractal-toolbar-title {
+		max-width: 100%;
+	}
+
+	.fractal-toolbar-controls {
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+
+	.fractal-metadata-panel {
+		flex-direction: column;
+		gap: 16px;
+	}
+
+	.fractal-popover-menu {
+		right: auto;
+		left: 0;
+		max-width: calc(100vw - 24px);
+	}
+}
