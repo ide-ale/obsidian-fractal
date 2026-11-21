@@ -1,7 +1,7 @@
 {
 	"id": "fractal",
 	"name": "Fractal",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"minAppVersion": "1.0.0",
 	"description": "Visualize and edit notes in a column-based card tree layout using standard Markdown heading hierarchy.",
 	"author": "Alessandro Abrami",
