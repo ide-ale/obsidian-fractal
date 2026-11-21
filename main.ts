@@ -4490,8 +4490,8 @@ export default class FractalPlugin extends Plugin {
 
 		// Add Command to toggle view
 		this.addCommand({
-			id: "toggle-fractal-view",
-			name: "Toggle Fractal view",
+			id: "toggle-view",
+			name: "Toggle view",
 			callback: () => this.toggleFractalView()
 		});
 
