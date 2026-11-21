@@ -1067,7 +1067,7 @@
 }
 
 .fractal-view-content[data-theme="custom"] .fractal-card,
-.fractal-view-content[data-theme="custom"] .fractal-card * {
+.fractal-view-content[data-theme="custom"] .fractal-card *:not(a):not(.callout-title):not(.callout-title *):not(.callout-icon) {
 	color: var(--fractal-custom-text-color, #eef1f6) !important;
 }
 
@@ -1336,19 +1336,53 @@
 	z-index: 2;
 }
 
-/* Image and media boundaries inside cards */
+/* Image and media boundaries inside cards and intro panel */
 .fractal-card img,
 .fractal-card video,
 .fractal-card iframe,
 .fractal-card .internal-embed,
 .fractal-card .internal-embed img,
-.fractal-card .internal-embed video {
+.fractal-card .internal-embed video,
+.fractal-root-content-body img,
+.fractal-root-content-body .internal-embed,
+.fractal-root-content-body .internal-embed img {
 	max-width: 100% !important;
 	height: auto !important;
 	object-fit: contain !important;
 	display: block;
 	border-radius: 4px;
 	box-sizing: border-box;
+}
+
+.fractal-card img,
+.fractal-card .internal-embed.image-embed img,
+.fractal-root-content-body img,
+.fractal-root-content-body .internal-embed.image-embed img {
+	cursor: zoom-in;
+}
+
+/* Built-in image lightbox modal fallback */
+.modal.fractal-image-modal {
+	width: auto;
+	max-width: 92vw;
+	max-height: 92vh;
+}
+
+.fractal-image-modal-caption {
+	font-size: 0.9em;
+	color: var(--text-muted);
+	margin-bottom: 8px;
+	text-align: center;
+}
+
+.fractal-image-modal-img {
+	max-width: 88vw;
+	max-height: 82vh;
+	width: auto;
+	height: auto;
+	display: block;
+	margin: 0 auto;
+	border-radius: 6px;
 }
 
 /* Child Addition Button on the right of the card */

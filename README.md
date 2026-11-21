@@ -1,6 +1,24 @@
 # Fractal for Obsidian
 
-**Fractal** is an Obsidian plugin that lets you visualize and edit standard Markdown notes in a column-based card tree layout (inspired by Gingko), directly mapped to your note's Markdown heading hierarchy (`H1`–`H6`) without modifying your underlying file format.
+**Fractal** is an Obsidian plugin that lets you visualize and edit standard Markdown notes in a column-based card tree layout (inspired by Gingko), directly mapped to your note's Markdown heading hierarchy (`H1`–`H6`) without altering your underlying `.md` files.
+
+![Fractal column tree navigation](docs/media/fractal-columns-navigation.jpg)
+
+## Visual Walkthrough
+
+### Column Navigation & Inline Card Editing
+
+Browse branches left-to-right, expand active cards, edit directly in place, and switch back to standard Markdown anytime with zero export or conversion step.
+
+![Fractal navigation and inline editing demo](docs/media/fractal-demo-editing.gif)
+
+### Rich Markdown Rendering & Layout Workflow
+
+Active cards and illuminated ancestor paths render full Obsidian Markdown (including embedded images, callouts, tables, fenced code blocks, and links), while unselected sibling cards collapse into concise previews.
+
+![Fractal workflow and structure demo](docs/media/fractal-demo-workflow.gif)
+
+![Fractal rich card with embedded image and callout](docs/media/fractal-rich-card-preview.jpg)
 
 ## Features
 
@@ -30,6 +48,24 @@
 - `Ctrl + N` / `Alt + N`: Insert a sibling card below.
 - `Ctrl + Shift + N` / `Alt + Shift + N`: Insert a child card.
 - `Ctrl/Cmd + Mouse Wheel`: Zoom in/out.
+
+## Installation
+
+### From Obsidian Community Plugins
+1. Open **Settings → Community plugins** in Obsidian.
+2. Select **Browse** and search for **Fractal**.
+3. Click **Install**, then **Enable**.
+
+### Manual Installation
+1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest GitHub Release](https://github.com/ide-ale/obsidian-fractal/releases/latest).
+2. Place them inside `<your-vault>/.obsidian/plugins/fractal/`.
+3. Reload community plugins in Obsidian settings and enable **Fractal**.
+
+## Support
+
+If you find Fractal useful for your writing or research, you can support ongoing development on Ko-fi:
+
+[![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/alessandroabrami)
 
 ## Author
 

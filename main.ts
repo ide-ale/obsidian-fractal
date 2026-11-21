@@ -348,14 +348,60 @@ function getPlainPreview(text: string, limit = 150): string {
 }
 
 /**
- * Post-process rendered markdown to fix callouts, task lists,
- * and other elements that MarkdownRenderer.render() may not handle
- * in custom view contexts.
+ * Post-process rendered markdown to fix task lists, image embeds,
+ * and media interaction inside custom view contexts.
  */
-function postProcessRenderedMarkdown(el: HTMLElement): void {
-	// Callout manual parsing removed to avoid conflicts with theme/Obsidian native rendering.
-	// If Obsidian doesn't render it natively as a callout, it will safely fallback to a blockquote.
-	
+const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"]);
+
+function postProcessRenderedMarkdown(el: HTMLElement, app?: App, sourcePath?: string): void {
+	// 1. Ensure embedded images inside .internal-embed actually resolve and render <img>
+	if (app && sourcePath !== undefined) {
+		const embeds = Array.from(el.querySelectorAll(".internal-embed")) as HTMLElement[];
+		for (const embed of embeds) {
+			const existingImg = embed.querySelector("img") as HTMLImageElement | null;
+			if (existingImg) {
+				existingImg.setAttribute("draggable", "false");
+				embed.addClass("is-loaded");
+				continue;
+			}
+			if (embed.querySelector("video, audio, svg, iframe")) {
+				continue;
+			}
+
+			const rawSrc = embed.getAttribute("src") || "";
+			if (!rawSrc) continue;
+			const pipeIdx = rawSrc.indexOf("|");
+			const linkAndSub = pipeIdx !== -1 ? rawSrc.substring(0, pipeIdx) : rawSrc;
+			const sizeSpec = pipeIdx !== -1 ? rawSrc.substring(pipeIdx + 1).trim() : "";
+			const linkPath = linkAndSub.split("#")[0].trim();
+			if (!linkPath) continue;
+
+			const dest = app.metadataCache.getFirstLinkpathDest(linkPath, sourcePath);
+			if (dest && IMAGE_EXTENSIONS.has(dest.extension.toLowerCase())) {
+				const img = embed.createEl("img", {
+					attr: {
+						src: app.vault.getResourcePath(dest),
+						alt: embed.getAttribute("alt") || dest.basename,
+						draggable: "false"
+					}
+				});
+				const widthMatch = sizeSpec.match(/^(\d+)(?:x(\d+))?$/);
+				if (widthMatch) {
+					img.style.width = `${widthMatch[1]}px`;
+					if (widthMatch[2]) {
+						img.style.height = `${widthMatch[2]}px`;
+					}
+				}
+				embed.addClass("media-embed", "image-embed", "is-loaded");
+			}
+		}
+	}
+
+	// Ensure all rendered images have draggable disabled so clicks/zooms don't trigger card drag
+	el.querySelectorAll("img").forEach((img) => {
+		img.setAttribute("draggable", "false");
+	});
+
 	// 2. Convert [ ] and [x] in list items (and unrendered lists in paragraphs) into checkboxes
 	// Sometimes Obsidian fails to parse lists inside blockquotes, leaving them as text starting with "1. [ ]"
 	const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
@@ -459,6 +505,34 @@ class ConfirmModal extends Modal {
 	}
 }
 
+class ImagePreviewModal extends Modal {
+	private src: string;
+	private alt: string;
+
+	constructor(app: App, src: string, alt: string) {
+		super(app);
+		this.src = src;
+		this.alt = alt;
+	}
+
+	onOpen(): void {
+		const { contentEl, modalEl } = this;
+		modalEl.addClass("fractal-image-modal");
+		contentEl.empty();
+		if (this.alt) {
+			contentEl.createEl("div", { cls: "fractal-image-modal-caption", text: this.alt });
+		}
+		contentEl.createEl("img", {
+			cls: "fractal-image-modal-img",
+			attr: { src: this.src, alt: this.alt }
+		});
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
 // Custom View class extending TextFileView
 export class FractalView extends TextFileView {
 	plugin: FractalPlugin;
@@ -479,6 +553,94 @@ export class FractalView extends TextFileView {
 	activeEditorInstance: any = null;
 	renderGeneration: number = 0;
 	renderedCardState: WeakMap<HTMLElement, { title: string; content: string; expanded: boolean; childCount: number }> = new WeakMap();
+	renderedCardComponents: Map<HTMLElement, Component> = new Map();
+	introRenderComponent: Component | null = null;
+
+	createCardComponent(cardEl: HTMLElement): Component {
+		this.unloadCardComponent(cardEl);
+		const comp = new Component();
+		this.addChild(comp);
+		comp.load();
+		this.renderedCardComponents.set(cardEl, comp);
+		return comp;
+	}
+
+	unloadCardComponent(cardEl: HTMLElement) {
+		const existing = this.renderedCardComponents.get(cardEl);
+		if (existing) {
+			this.removeChild(existing);
+			existing.unload();
+			this.renderedCardComponents.delete(cardEl);
+		}
+	}
+
+	unloadComponentsInContainer(container: HTMLElement) {
+		const cardEls = Array.from(container.querySelectorAll(".fractal-card")) as HTMLElement[];
+		for (const el of cardEls) {
+			this.unloadCardComponent(el);
+		}
+	}
+
+	unloadAllCardComponents() {
+		for (const comp of this.renderedCardComponents.values()) {
+			this.removeChild(comp);
+			comp.unload();
+		}
+		this.renderedCardComponents.clear();
+		if (this.introRenderComponent) {
+			this.removeChild(this.introRenderComponent);
+			this.introRenderComponent.unload();
+			this.introRenderComponent = null;
+		}
+	}
+
+	captureCardIdMap(): Map<FractalCard, string> {
+		const map = new Map<FractalCard, string>();
+		const walk = (card: FractalCard) => {
+			if (card.headingLevel > 0) {
+				map.set(card, card.id);
+			}
+			card.children.forEach(walk);
+		};
+		walk(this.root);
+		return map;
+	}
+
+	migrateTreeSettings(oldIdMap: Map<FractalCard, string>) {
+		if (!this.file) return;
+		const path = this.file.path;
+		const colors = this.plugin.settings.cardColors[path];
+		const collapsed = this.plugin.settings.collapsedNodes[path];
+		if (!colors && !collapsed) return;
+
+		const newColors: Record<string, string> = colors ? { ...colors } : {};
+		const newCollapsed: Record<string, boolean> = collapsed ? { ...collapsed } : {};
+		let changed = false;
+
+		for (const [card, oldId] of oldIdMap.entries()) {
+			if (card.id === oldId) continue;
+			if (colors && colors[oldId] !== undefined) {
+				newColors[card.id] = colors[oldId];
+				if (newColors[oldId] === colors[oldId]) {
+					delete newColors[oldId];
+				}
+				changed = true;
+			}
+			if (collapsed && collapsed[oldId] !== undefined) {
+				newCollapsed[card.id] = collapsed[oldId];
+				if (newCollapsed[oldId] === collapsed[oldId]) {
+					delete newCollapsed[oldId];
+				}
+				changed = true;
+			}
+		}
+
+		if (changed) {
+			if (colors) this.plugin.settings.cardColors[path] = newColors;
+			if (collapsed) this.plugin.settings.collapsedNodes[path] = newCollapsed;
+			this.plugin.saveSettings();
+		}
+	}
 
 	cleanupActiveEditor() {
 		if (this.activeEditorInstance) {
@@ -502,7 +664,6 @@ export class FractalView extends TextFileView {
 	showMetadataPanel: boolean = false;
 	rootPanelExpanded: boolean = false;
 	selectedLevel: number = 1;
-	renderComponent: Component | null = null;
 	
 	// History stacks for document Undo/Redo
 	historyUndoStack: string[] = [];
@@ -584,6 +745,12 @@ export class FractalView extends TextFileView {
 	}
 
 	applySerializedState(stateText: string) {
+		this.cleanupActiveEditor();
+		this.editingCardId = null;
+		this.originalCardTitle = null;
+		this.originalCardContent = null;
+		this.editingYaml = false;
+		this.editingRootContent = false;
 		this.data = stateText;
 		const parsed = parseMarkdown(stateText, this.file ? this.file.basename : "Untitled");
 		this.root = parsed.root;
@@ -608,10 +775,14 @@ export class FractalView extends TextFileView {
 			const card = cardInfo ? cardInfo.parent.children[cardInfo.index] : null;
 
 			if (this.activeEditorInstance) {
-				try {
-					newContent = this.activeEditorInstance.getViewData();
-				} catch (err) {
-					console.error("Fractal: Failed to get view data", err);
+				if (this.activeEditorInstance.__fractalReady) {
+					try {
+						newContent = this.activeEditorInstance.getViewData();
+					} catch (err) {
+						console.error("Fractal: Failed to get view data", err);
+						newContent = card ? card.content : "";
+					}
+				} else {
 					newContent = card ? card.content : "";
 				}
 			} else {
@@ -626,12 +797,22 @@ export class FractalView extends TextFileView {
 				if (newTitle === "New card" && newContent === "" && card.children.length === 0) {
 					this.cleanupActiveEditor();
 					this.editingCardId = null;
+					this.originalCardTitle = null;
+					this.originalCardContent = null;
+					if (this.editBlurTimeout) {
+						clearTimeout(this.editBlurTimeout);
+						this.editBlurTimeout = null;
+					}
 					this.deleteCard(card);
+					return;
 				} else if (card.title !== newTitle || card.content !== newContent) {
 					this.pushHistory();
+					const oldIdMap = this.captureCardIdMap();
 					card.title = newTitle;
 					card.content = newContent;
 					assignStableKeys(this.root);
+					this.migrateTreeSettings(oldIdMap);
+					this.updateActivePathToCard(card);
 					this.requestSave();
 				}
 			}
@@ -745,6 +926,7 @@ export class FractalView extends TextFileView {
 			this.cardClickTimeout = null;
 		}
 		this.cleanupActiveEditor();
+		this.unloadAllCardComponents();
 		this.expandedCardIds.clear();
 		this.historyUndoStack = [];
 		this.historyRedoStack = [];
@@ -849,15 +1031,6 @@ export class FractalView extends TextFileView {
 		const oldScrollLeft = oldContainer ? oldContainer.scrollLeft : 0;
 		const oldScrollTop = oldContainer ? oldContainer.scrollTop : 0;
 
-		// Clean up previous rendering component to prevent memory leaks
-		if (this.renderComponent) {
-			this.removeChild(this.renderComponent);
-			this.renderComponent.unload();
-		}
-		this.renderComponent = new Component();
-		this.addChild(this.renderComponent);
-		this.renderComponent.load();
-
 		// Only rebuild full UI shell if it doesn't exist yet
 		let container = this.contentEl.querySelector(".fractal-view-container") as HTMLElement;
 		let metadataPanel = this.contentEl.querySelector(".fractal-metadata-panel") as HTMLElement;
@@ -865,6 +1038,7 @@ export class FractalView extends TextFileView {
 		this.contentEl.addClass("fractal-view-content");
 
 		if (!container) {
+			this.unloadAllCardComponents();
 			this.contentEl.empty();
 
 			// 1. Render Top Header Toolbar (created once, not rebuilt on every click)
@@ -884,11 +1058,6 @@ export class FractalView extends TextFileView {
 			}
 		}
 
-		// Always update/render metadata panel contents
-		if (metadataPanel) {
-			this.renderMetadataPanel(metadataPanel);
-		}
-
 		// Always update/render edit toolbar contents
 		const editToolbar = this.contentEl.querySelector(".fractal-header-edit-toolbar") as HTMLElement;
 		if (editToolbar) {
@@ -897,6 +1066,12 @@ export class FractalView extends TextFileView {
 
 		this.applyThemeStyles();
 		this.updateZoomStyles(container);
+
+		// Always update/render metadata panel contents
+		if (metadataPanel) {
+			await this.renderMetadataPanel(metadataPanel, gen);
+			if (gen !== this.renderGeneration) return;
+		}
 
 		// Refresh only the columns content (fast, no toolbar/canvas rebuild)
 		await this.refreshColumns(container, oldScrollLeft, oldScrollTop, gen);
@@ -1029,6 +1204,7 @@ export class FractalView extends TextFileView {
 		for (const colEl of allColumnEls) {
 			const colLevel = parseInt(colEl.getAttribute("data-level") || "0");
 			if (!levelsRendered.has(colLevel)) {
+				this.unloadComponentsInContainer(colEl);
 				colEl.remove();
 			}
 		}
@@ -2258,11 +2434,13 @@ export class FractalView extends TextFileView {
 		}
 		
 		this.pushHistory();
+		const oldIdMap = this.captureCardIdMap();
 		const temp = parent.children[index];
 		parent.children[index] = parent.children[targetIndex];
 		parent.children[targetIndex] = temp;
 		
 		assignStableKeys(this.root);
+		this.migrateTreeSettings(oldIdMap);
 		this.updateActivePathToCard(card);
 		this.requestSave();
 		this.renderFractal();
@@ -2394,6 +2572,7 @@ export class FractalView extends TextFileView {
 		}
 
 		if (needsRebuild) {
+			this.unloadComponentsInContainer(columnEl);
 			columnEl.empty();
 			columnEl.createDiv({ cls: "fractal-column-spacer" });
 			this.setupColumnDragAndDrop(columnEl, level, parent);
@@ -2469,12 +2648,14 @@ export class FractalView extends TextFileView {
 					if (bodyEl && needsContentRender) {
 						bodyEl.empty();
 						if (isExpanded) {
+							const cardComp = this.createCardComponent(cardEl);
 							if (card.content && this.file) {
-								await MarkdownRenderer.render(this.app, card.content, bodyEl, this.file.path, this.renderComponent!);
-								postProcessRenderedMarkdown(bodyEl);
+								await MarkdownRenderer.render(this.app, card.content, bodyEl, this.file.path, cardComp);
+								postProcessRenderedMarkdown(bodyEl, this.app, this.file.path);
 							}
 							cardEl.addClass("was-expanded");
 						} else {
+							this.unloadCardComponent(cardEl);
 							const previewText = getPlainPreview(card.content, 150);
 							bodyEl.createEl("p", { text: previewText });
 							cardEl.removeClass("was-expanded");
@@ -2502,6 +2683,7 @@ export class FractalView extends TextFileView {
 					});
 				}
 			} else {
+				this.unloadComponentsInContainer(columnEl);
 				columnEl.empty();
 				columnEl.createDiv({ cls: "fractal-column-spacer" });
 				this.setupColumnDragAndDrop(columnEl, level, parent);
@@ -2627,7 +2809,12 @@ export class FractalView extends TextFileView {
 		}
 	}
 
-	async renderMetadataPanel(panelEl: HTMLElement) {
+	async renderMetadataPanel(panelEl: HTMLElement, gen?: number) {
+		if (this.introRenderComponent) {
+			this.removeChild(this.introRenderComponent);
+			this.introRenderComponent.unload();
+			this.introRenderComponent = null;
+		}
 		panelEl.empty();
 		if (!this.showMetadataPanel) {
 			panelEl.addClass("collapsed");
@@ -2684,6 +2871,7 @@ export class FractalView extends TextFileView {
 				inlineView.setViewData = async () => {};
 				
 				this.activeEditorInstance = inlineView;
+				inlineView.__fractalReady = false;
 				
 				if (inlineView.getMode() === 'preview') {
 					inlineView.setState({ mode: 'source' }, { history: false });
@@ -2695,10 +2883,12 @@ export class FractalView extends TextFileView {
 					inlineView.onUnloadFile(targetFile).then(() => {
 						if (this.activeEditorInstance !== inlineView) return;
 						inlineView.__setViewData__(this.root.content || "", true);
+						inlineView.__fractalReady = true;
 						inlineView.onLoadFile(targetFile);
 					});
 				} else {
 					inlineView.__setViewData__(this.root.content || "", true);
+					inlineView.__fractalReady = true;
 				}
 				
 				editorContainer.addEventListener("focusin", () => {
@@ -2711,11 +2901,13 @@ export class FractalView extends TextFileView {
 						e.preventDefault();
 						e.stopPropagation();
 						
-						let val = "";
-						try {
-							val = inlineView.getViewData();
-						} catch (err) {
-							val = this.root.content || "";
+						let val = this.root.content || "";
+						if (inlineView.__fractalReady) {
+							try {
+								val = inlineView.getViewData();
+							} catch (err) {
+								val = this.root.content || "";
+							}
 						}
 
 						this.cleanupActiveEditor();
@@ -2731,11 +2923,13 @@ export class FractalView extends TextFileView {
 
 				editIntroBtn.addEventListener("click", (e) => {
 					e.stopPropagation();
-					let val = "";
-					try {
-						val = inlineView.getViewData();
-					} catch (err) {
-						val = this.root.content || "";
+					let val = this.root.content || "";
+					if (inlineView.__fractalReady) {
+						try {
+							val = inlineView.getViewData();
+						} catch (err) {
+							val = this.root.content || "";
+						}
 					}
 
 					this.cleanupActiveEditor();
@@ -2785,8 +2979,34 @@ export class FractalView extends TextFileView {
 			const introContentEl = bodyEl.createDiv({ cls: "fractal-root-content-body markdown-preview-view markdown-rendered" });
 			if (this.root.content) {
 				if (this.file) {
-					await MarkdownRenderer.render(this.app, this.root.content, introContentEl, this.file.path, this.renderComponent!);
-					postProcessRenderedMarkdown(introContentEl);
+					const introComp = new Component();
+					this.addChild(introComp);
+					introComp.load();
+					this.introRenderComponent = introComp;
+					await MarkdownRenderer.render(this.app, this.root.content, introContentEl, this.file.path, introComp);
+					if (gen !== undefined && gen !== this.renderGeneration) return;
+					postProcessRenderedMarkdown(introContentEl, this.app, this.file.path);
+					introContentEl.addEventListener("click", (e) => {
+						const target = e.target as HTMLElement;
+						const linkEl = target.closest("a.internal-link") as HTMLElement | null;
+						if (linkEl) {
+							e.stopPropagation();
+							e.preventDefault();
+							const dest = linkEl.getAttribute("data-href") || linkEl.getAttribute("href") || "";
+							if (dest) {
+								this.app.workspace.openLinkText(dest, this.file?.path || "", e.ctrlKey || e.metaKey);
+							}
+							return;
+						}
+						const imgTarget = target.closest("img, .internal-embed.image-embed, .internal-embed.media-embed") as HTMLElement | null;
+						if (imgTarget) {
+							const imgEl = (imgTarget.tagName === "IMG" ? imgTarget : imgTarget.querySelector("img")) as HTMLImageElement | null;
+							const hasImageToolkit = Boolean((this.app as any).plugins?.enabledPlugins?.has("obsidian-image-toolkit"));
+							if (imgEl && !hasImageToolkit) {
+								new ImagePreviewModal(this.app, imgEl.src, imgEl.alt || "").open();
+							}
+						}
+					});
 				} else {
 					introContentEl.createEl("p", { text: this.root.content });
 				}
@@ -2926,6 +3146,7 @@ export class FractalView extends TextFileView {
 			inlineView.setViewData = async () => {};
 			
 			this.activeEditorInstance = inlineView;
+			inlineView.__fractalReady = false;
 			
 			if (inlineView.getMode() === 'preview') {
 				inlineView.setState({ mode: 'source' }, { history: false });
@@ -2937,10 +3158,12 @@ export class FractalView extends TextFileView {
 				inlineView.onUnloadFile(targetFile).then(() => {
 					if (this.activeEditorInstance !== inlineView) return;
 					inlineView.__setViewData__(rawYamlDoc, true);
+					inlineView.__fractalReady = true;
 					inlineView.onLoadFile(targetFile);
 				});
 			} else {
 				inlineView.__setViewData__(rawYamlDoc, true);
+				inlineView.__fractalReady = true;
 			}
 
 			editorContainer.addEventListener("focusin", () => {
@@ -2953,14 +3176,16 @@ export class FractalView extends TextFileView {
 					e.preventDefault();
 					e.stopPropagation();
 					
-					let val = "";
-					try {
-						val = inlineView.getViewData();
-					} catch (err) {
-						val = rawYamlDoc;
+					let val = rawYamlDoc;
+					if (inlineView.__fractalReady) {
+						try {
+							val = inlineView.getViewData();
+						} catch (err) {
+							val = rawYamlDoc;
+						}
 					}
 
-					const fmMatch = val.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+					const fmMatch = val.match(/^---\r?\n([\s\S]*?)\r?\n?---(?:\r?\n|$)/);
 					if (fmMatch) {
 						const newFrontmatter = fmMatch[1];
 						if (this.frontmatter !== newFrontmatter) {
@@ -2977,14 +3202,16 @@ export class FractalView extends TextFileView {
 
 			saveBtn.addEventListener("click", (e) => {
 				e.stopPropagation();
-				let val = "";
-				try {
-					val = inlineView.getViewData();
-				} catch (err) {
-					val = rawYamlDoc;
+				let val = rawYamlDoc;
+				if (inlineView.__fractalReady) {
+					try {
+						val = inlineView.getViewData();
+					} catch (err) {
+						val = rawYamlDoc;
+					}
 				}
 
-				const fmMatch = val.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+				const fmMatch = val.match(/^---\r?\n([\s\S]*?)\r?\n?---(?:\r?\n|$)/);
 				if (fmMatch) {
 					const newFrontmatter = fmMatch[1];
 					if (this.frontmatter !== newFrontmatter) {
@@ -3045,10 +3272,14 @@ export class FractalView extends TextFileView {
 		const newTitle = titleInput.value.trim() || "Untitled";
 		let newContent = "";
 		if (this.activeEditorInstance) {
-			try {
-				newContent = this.activeEditorInstance.getViewData();
-			} catch (err) {
-				console.error("Fractal: Failed to get view data", err);
+			if (this.activeEditorInstance.__fractalReady) {
+				try {
+					newContent = this.activeEditorInstance.getViewData();
+				} catch (err) {
+					console.error("Fractal: Failed to get view data", err);
+					newContent = card.content || "";
+				}
+			} else {
 				newContent = card.content || "";
 			}
 		} else {
@@ -3068,15 +3299,13 @@ export class FractalView extends TextFileView {
 
 		if (card.title !== newTitle || card.content !== newContent) {
 			this.pushHistory();
+			const oldIdMap = this.captureCardIdMap();
 			card.title = newTitle;
 			card.content = newContent;
 
-			const oldId = card.id;
 			assignStableKeys(this.root);
+			this.migrateTreeSettings(oldIdMap);
 			this.updateActivePathToCard(card);
-			if (oldId !== card.id) {
-				this.migrateNodeSettings(oldId, card.id);
-			}
 			this.requestSave();
 		}
 		this.renderFractal();
@@ -3140,6 +3369,7 @@ export class FractalView extends TextFileView {
 				inlineView.setViewData = async () => {};
 				
 				this.activeEditorInstance = inlineView;
+				inlineView.__fractalReady = false;
 				
 				if (inlineView.getMode() === 'preview') {
 					inlineView.setState({ mode: 'source' }, { history: false });
@@ -3152,10 +3382,12 @@ export class FractalView extends TextFileView {
 					inlineView.onUnloadFile(targetFile).then(() => {
 						if (this.activeEditorInstance !== inlineView) return;
 						inlineView.__setViewData__(card.content || "", true);
+						inlineView.__fractalReady = true;
 						inlineView.onLoadFile(targetFile);
 					});
 				} else {
 					inlineView.__setViewData__(card.content || "", true);
+					inlineView.__fractalReady = true;
 				}
 				
 				editorContainer.addEventListener("focusin", () => {
@@ -3261,9 +3493,10 @@ export class FractalView extends TextFileView {
 			// Only render rich markdown if the card is expanded (active card or ancestor).
 			// Otherwise render a clean, truncated plain text preview.
 			if (isExpanded) {
+				const cardComp = this.createCardComponent(cardEl);
 				if (card.content && this.file) {
-					await MarkdownRenderer.render(this.app, card.content, bodyEl, this.file.path, this.renderComponent!);
-					postProcessRenderedMarkdown(bodyEl);
+					await MarkdownRenderer.render(this.app, card.content, bodyEl, this.file.path, cardComp);
+					postProcessRenderedMarkdown(bodyEl, this.app, this.file.path);
 				}
 				cardEl.addClass("was-expanded");
 			} else {
@@ -3415,6 +3648,18 @@ export class FractalView extends TextFileView {
 					return;
 				}
 
+				const imgTarget = target.closest("img, .internal-embed.image-embed, .internal-embed.media-embed") as HTMLElement | null;
+				if (imgTarget) {
+					if (cardEl.hasClass("was-expanded")) {
+						const imgEl = (imgTarget.tagName === "IMG" ? imgTarget : imgTarget.querySelector("img")) as HTMLImageElement | null;
+						const hasImageToolkit = Boolean((this.app as any).plugins?.enabledPlugins?.has("obsidian-image-toolkit"));
+						if (imgEl && !hasImageToolkit) {
+							new ImagePreviewModal(this.app, imgEl.src, imgEl.alt || "").open();
+						}
+						return;
+					}
+				}
+
 				e.stopPropagation();
 
 				if (this.cardClickTimeout) {
@@ -3431,21 +3676,14 @@ export class FractalView extends TextFileView {
 						this.saveActiveEdit();
 					}
 					this.cardClickTimeout = null;
-					this.activeKeysByLevel[level] = card.id;
-					// Reset children selection below
-					for (let i = level + 1; i <= 6; i++) {
-						delete this.activeKeysByLevel[i];
-					}
-					this.ensureSelectionPath();
-					this.selectedLevel = level;
-					this.renderFractal();
+					this.selectCard(card, level);
 				}, 200);
 			});
 
 			// Double-click edit handler (using capture: true to intercept children events)
 			cardEl.addEventListener("dblclick", (e) => {
 				const target = e.target as HTMLElement;
-				if (target.closest("a.internal-link") || target.closest("a.external-link")) {
+				if (target.closest("a.internal-link, a.external-link, img, .internal-embed.image-embed, .internal-embed.media-embed, video, audio")) {
 					return;
 				}
 				e.stopPropagation();
@@ -3585,15 +3823,16 @@ export class FractalView extends TextFileView {
 		const targetInfo = this.findParent(this.root, targetId);
 		if (!targetInfo) return;
 
-		this.pushHistory();
-
-		const draggedCard = draggedInfo.parent.children[draggedInfo.index];
-
 		// Prevent dropping a card into itself or its own descendants
 		if (targetId === draggedId || targetId.startsWith(draggedId + " > ")) {
 			new Notice("Cannot drag a card inside itself or its own descendants");
 			return;
 		}
+
+		this.pushHistory();
+		const oldIdMap = this.captureCardIdMap();
+
+		const draggedCard = draggedInfo.parent.children[draggedInfo.index];
 
 		// Remove from old parent
 		draggedInfo.parent.children.splice(draggedInfo.index, 1);
@@ -3612,6 +3851,7 @@ export class FractalView extends TextFileView {
 		this.adjustHeadingLevel(draggedCard, targetHeadingLevel);
 
 		assignStableKeys(this.root);
+		this.migrateTreeSettings(oldIdMap);
 
 		const droppedVisualLevel = this.getCardDepth(freshTargetInfo.parent.id) + 1;
 		this.activeKeysByLevel[droppedVisualLevel] = draggedCard.id;
@@ -3630,15 +3870,16 @@ export class FractalView extends TextFileView {
 		const draggedInfo = this.findParent(this.root, draggedId);
 		if (!draggedInfo) return;
 
-		this.pushHistory();
-
-		const draggedCard = draggedInfo.parent.children[draggedInfo.index];
-
 		// Prevent dragging parent to its own child column
 		if (targetParent.id === draggedId || targetParent.id.startsWith(draggedId + " > ")) {
 			new Notice("Cannot drag a card inside itself or its own descendants");
 			return;
 		}
+
+		this.pushHistory();
+		const oldIdMap = this.captureCardIdMap();
+
+		const draggedCard = draggedInfo.parent.children[draggedInfo.index];
 
 		// Remove from old parent
 		draggedInfo.parent.children.splice(draggedInfo.index, 1);
@@ -3650,6 +3891,7 @@ export class FractalView extends TextFileView {
 		this.adjustHeadingLevel(draggedCard, targetHeadingLevel);
 
 		assignStableKeys(this.root);
+		this.migrateTreeSettings(oldIdMap);
 		this.activeKeysByLevel[targetLevel] = draggedCard.id;
 
 		for (let i = targetLevel + 1; i <= 6; i++) {
@@ -4253,6 +4495,21 @@ export default class FractalPlugin extends Plugin {
 			callback: () => this.toggleFractalView()
 		});
 
+		// Re-render open Fractal views once vault metadata cache resolves embeds/links
+		this.registerEvent(
+			this.app.metadataCache.on("resolved", () => {
+				const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_FRACTAL);
+				for (const leaf of leaves) {
+					if (leaf.view instanceof FractalView) {
+						const unresolvedEmbeds = leaf.view.contentEl.querySelectorAll(".internal-embed:not(.is-loaded)");
+						if (unresolvedEmbeds.length > 0) {
+							leaf.view.renderFractal();
+						}
+					}
+				}
+			})
+		);
+
 		// Register settings tab
 		this.addSettingTab(new FractalSettingTab(this.app, this));
 	}
@@ -4294,6 +4551,7 @@ export default class FractalPlugin extends Plugin {
 			});
 		} else if (currentViewState.type === VIEW_TYPE_FRACTAL) {
 			const fractalView = activeLeaf.view as FractalView;
+			fractalView.saveActiveEdit();
 			const selectedId = fractalView.activeKeysByLevel[fractalView.selectedLevel];
 
 			await activeLeaf.setViewState({
