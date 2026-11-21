@@ -18,8 +18,8 @@
 	align-items: center;
 	justify-content: space-between;
 	padding: 8px 16px;
-	background-color: #1a365d; /* Dark blue matching canvas theme */
-	border-bottom: 1px solid #2b6cb0;
+	background-color: var(--background-secondary-alt);
+	border-bottom: 1px solid var(--background-modifier-border);
 	height: 48px;
 	box-sizing: border-box;
 	z-index: 110;
@@ -938,6 +938,10 @@
 	box-sizing: border-box;
 }
 
+.fractal-card-edit-body-raw.fractal-yaml-edit-raw {
+	min-height: 120px;
+}
+
 .fractal-card-edit-body-rich:focus,
 .fractal-card-edit-body-raw:focus {
 	outline: none;
@@ -1232,11 +1236,15 @@
 	padding: 12px;
 	box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
 	z-index: 1000;
-	display: flex;
+	display: none;
 	flex-direction: column;
 	gap: 10px;
 	min-width: 250px;
 	animation: popoverFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fractal-popover-menu.is-open {
+	display: block;
 }
 
 @keyframes popoverFadeIn {
@@ -1261,6 +1269,10 @@
 	border-top: 1px solid var(--background-modifier-border);
 	padding-top: 8px;
 	margin-top: 4px;
+}
+
+.fractal-custom-colors-container:not(.is-visible) {
+	display: none;
 }
 
 .fractal-custom-tabs-row {
@@ -1848,6 +1860,10 @@ body.theme-light .fractal-view-content .fractal-root-content-body .callout-conte
 .fractal-card-body .task-list-item-checkbox {
 	margin: 0 4px 0 0 !important;
 	cursor: default !important;
+}
+
+.fractal-task-checkbox {
+	margin-right: 6px;
 }
 
 /* ====== CODE BLOCKS ====== */

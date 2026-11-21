@@ -16,7 +16,6 @@ import {
 	WorkspaceLeaf,
 	TextFileView,
 	MarkdownRenderer,
-	TFile,
 	Menu,
 	Modal,
 	Notice,
@@ -321,7 +320,7 @@ function parseYAML(yamlStr: string): Record<string, string> {
 	if (!yamlStr) return result;
 	const lines = yamlStr.split("\n");
 	for (const line of lines) {
-		const match = line.match(/^([a-zA-Z0-9_\-]+)\s*:\s*(.*)$/);
+		const match = line.match(/^([a-zA-Z0-9_-]+)\s*:\s*(.*)$/);
 		if (match) {
 			result[match[1].trim()] = match[2].trim();
 		}
@@ -340,7 +339,7 @@ function getPlainPreview(text: string, limit = 150): string {
 	plain = plain.replace(/^(#{1,6})\s+/gm, ""); // headers
 	plain = plain.replace(/(\*\*|__)(.*?)\1/g, "$2"); // bold
 	plain = plain.replace(/(\*|_)(.*?)\1/g, "$2"); // italic
-	plain = plain.replace(/^\s*[\-\*\+]\s+/gm, ""); // bullets
+	plain = plain.replace(/^\s*[-*+]\s+/gm, ""); // bullets
 	plain = plain.replace(/^\s*>\s*/gm, ""); // blockquotes
 	plain = plain.replace(/```[\s\S]*?```/g, "[Code]"); // code blocks
 	plain = plain.replace(/`([^`]+)`/g, "$1"); // inline code
@@ -416,22 +415,22 @@ function postProcessRenderedMarkdown(el: HTMLElement, app?: App, sourcePath?: st
 	// Sometimes Obsidian fails to parse lists inside blockquotes, leaving them as text starting with "1. [ ]"
 	const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
 	const textNodesToCheck: Text[] = [];
-	let currNode: Node | null;
-	while (currNode = walker.nextNode()) {
+	let currNode: Node | null = walker.nextNode();
+	while (currNode) {
 		textNodesToCheck.push(currNode as Text);
+		currNode = walker.nextNode();
 	}
 	
 	for (const textNode of textNodesToCheck) {
 		const text = textNode.nodeValue || "";
-		const checkMatch = text.match(/^(\s*(?:\d+\.|\-|\*)?\s*)\[([ xX])\]\s*/);
+		const checkMatch = text.match(/^(\s*(?:\d+\.|-|\*)?\s*)\[([ xX])\]\s*/);
 		if (checkMatch) {
 			const isChecked = checkMatch[2].toLowerCase() === "x";
 			const checkbox = document.createElement("input");
 			checkbox.type = "checkbox";
 			checkbox.checked = isChecked;
 			checkbox.disabled = true;
-			checkbox.className = "task-list-item-checkbox";
-			checkbox.style.marginRight = "6px";
+			checkbox.className = "task-list-item-checkbox fractal-task-checkbox";
 			
 			const parent = textNode.parentNode;
 			if (parent) {
@@ -441,7 +440,7 @@ function postProcessRenderedMarkdown(el: HTMLElement, app?: App, sourcePath?: st
 				parent.insertBefore(markerText, textNode);
 				parent.insertBefore(checkbox, textNode);
 				
-				if (parent instanceof HTMLElement) {
+				if (parent.instanceOf(HTMLElement)) {
 					parent.classList.add("task-list-item");
 					parent.parentElement?.classList.add("contains-task-list");
 				}
@@ -810,7 +809,7 @@ export class FractalView extends TextFileView {
 					this.originalCardTitle = null;
 					this.originalCardContent = null;
 					if (this.editBlurTimeout) {
-						clearTimeout(this.editBlurTimeout);
+						window.clearTimeout(this.editBlurTimeout);
 						this.editBlurTimeout = null;
 					}
 					this.deleteCard(card);
@@ -832,7 +831,7 @@ export class FractalView extends TextFileView {
 		this.originalCardTitle = null;
 		this.originalCardContent = null;
 		if (this.editBlurTimeout) {
-			clearTimeout(this.editBlurTimeout);
+			window.clearTimeout(this.editBlurTimeout);
 			this.editBlurTimeout = null;
 		}
 	}
@@ -851,7 +850,7 @@ export class FractalView extends TextFileView {
 		this.originalCardTitle = null;
 		this.originalCardContent = null;
 		if (this.editBlurTimeout) {
-			clearTimeout(this.editBlurTimeout);
+			window.clearTimeout(this.editBlurTimeout);
 			this.editBlurTimeout = null;
 		}
 		
@@ -872,9 +871,9 @@ export class FractalView extends TextFileView {
 		
 		if (!this.plugin.settings.centeredNavigation) {
 			columns.forEach(col => {
-				col.style.transform = "";
+				col.style.removeProperty("transform");
 			});
-			columnsContainer.style.height = "";
+			columnsContainer.style.removeProperty("height");
 			return;
 		}
 
@@ -928,11 +927,11 @@ export class FractalView extends TextFileView {
 
 	resetDocumentState() {
 		if (this.editBlurTimeout) {
-			clearTimeout(this.editBlurTimeout);
+			window.clearTimeout(this.editBlurTimeout);
 			this.editBlurTimeout = null;
 		}
 		if (this.cardClickTimeout) {
-			clearTimeout(this.cardClickTimeout);
+			window.clearTimeout(this.cardClickTimeout);
 			this.cardClickTimeout = null;
 		}
 		this.cleanupActiveEditor();
@@ -1222,7 +1221,7 @@ export class FractalView extends TextFileView {
 		container.scrollLeft = oldScrollLeft;
 		container.scrollTop = oldScrollTop;
 
-		requestAnimationFrame(() => {
+		window.requestAnimationFrame(() => {
 			if (gen !== this.renderGeneration) return;
 			this.applyCenteredLayout();
 			const activeEl = container.querySelector(".fractal-card.active") as HTMLElement;
@@ -1290,7 +1289,6 @@ export class FractalView extends TextFileView {
 		setIcon(btnStyle, "palette");
 
 		const stylePopover = styleWrapper.createDiv({ cls: "fractal-popover-menu style-popover" });
-		stylePopover.style.display = "none";
 
 		// Popover Theme Row
 		const themeRow = stylePopover.createDiv({ cls: "fractal-popover-row" });
@@ -1301,9 +1299,10 @@ export class FractalView extends TextFileView {
 		themeSelect.value = this.plugin.settings.themeMode || "obsidian-theme";
 
 		// Popover Swatches Grid
-		const customColorsDiv = stylePopover.createDiv({ 
-			cls: "fractal-custom-colors-container",
-			attr: { style: this.plugin.settings.themeMode === "custom" ? "display: flex;" : "display: none;" }
+		const customColorsDiv = stylePopover.createDiv({
+			cls: this.plugin.settings.themeMode === "custom"
+				? "fractal-custom-colors-container is-visible"
+				: "fractal-custom-colors-container"
 		});
 
 		this.renderCustomColors(customColorsDiv);
@@ -1313,11 +1312,7 @@ export class FractalView extends TextFileView {
 			this.plugin.settings.themeMode = val;
 			this.plugin.saveSettings();
 			
-			if (val === "custom") {
-				customColorsDiv.style.display = "flex";
-			} else {
-				customColorsDiv.style.display = "none";
-			}
+			customColorsDiv.toggleClass("is-visible", val === "custom");
 			
 			const leaves = this.plugin.app.workspace.getLeavesOfType(VIEW_TYPE_FRACTAL);
 			for (const leaf of leaves) {
@@ -1336,7 +1331,6 @@ export class FractalView extends TextFileView {
 		setIcon(btnLayout, "sliders");
 
 		const layoutPopover = layoutWrapper.createDiv({ cls: "fractal-popover-menu layout-popover" });
-		layoutPopover.style.display = "none";
 
 		// Group 1: Canvas & text
 		layoutPopover.createEl("div", { 
@@ -1482,7 +1476,7 @@ export class FractalView extends TextFileView {
 				id: "fractal-height-auto"
 			}
 		});
-		const autoLabel = inactiveHeightControls.createEl("label", {
+		inactiveHeightControls.createEl("label", {
 			text: "Auto",
 			cls: "fractal-popover-checkbox-label",
 			attr: {
@@ -1659,7 +1653,7 @@ export class FractalView extends TextFileView {
 			}
 		});
 		gridCheckbox.checked = (this.plugin.settings.showGrid !== false);
-		const gridCheckboxLabel = showGridControls.createEl("label", {
+		showGridControls.createEl("label", {
 			text: "Enable",
 			cls: "fractal-popover-checkbox-label",
 			attr: {
@@ -1771,7 +1765,7 @@ export class FractalView extends TextFileView {
 				id: "fractal-spacing-auto"
 			}
 		});
-		const autoSpacingLabel = autoSpacingControls.createEl("label", {
+		autoSpacingControls.createEl("label", {
 			text: "Auto",
 			cls: "fractal-popover-checkbox-label",
 			attr: {
@@ -2081,16 +2075,14 @@ export class FractalView extends TextFileView {
 		// Event listeners to toggle popovers
 		btnStyle.addEventListener("click", (evt) => {
 			evt.stopPropagation();
-			layoutPopover.style.display = "none";
-			const current = stylePopover.style.display;
-			stylePopover.style.display = current === "none" ? "block" : "none";
+			layoutPopover.removeClass("is-open");
+			stylePopover.toggleClass("is-open", !stylePopover.hasClass("is-open"));
 		});
 
 		btnLayout.addEventListener("click", (evt) => {
 			evt.stopPropagation();
-			stylePopover.style.display = "none";
-			const current = layoutPopover.style.display;
-			layoutPopover.style.display = current === "none" ? "block" : "none";
+			stylePopover.removeClass("is-open");
+			layoutPopover.toggleClass("is-open", !layoutPopover.hasClass("is-open"));
 		});
 
 		// Close popovers on click outside (persists for view lifetime)
@@ -2099,8 +2091,8 @@ export class FractalView extends TextFileView {
 			if (!target.closest(".fractal-popover-menu") && 
 				!target.closest(".style-popover-btn") && 
 				!target.closest(".layout-popover-btn")) {
-				stylePopover.style.display = "none";
-				layoutPopover.style.display = "none";
+				stylePopover.removeClass("is-open");
+				layoutPopover.removeClass("is-open");
 			}
 		};
 		this.registerDomEvent(document, "click", closePopovers);
@@ -2378,7 +2370,7 @@ export class FractalView extends TextFileView {
 						editor.replaceSelection('[[' + selection + ']]');
 					}
 					break;
-				case 'list':
+				case 'list': {
 					const lines = selection.split('\n');
 					const formatted = lines.map((line: string) => {
 						if (line.startsWith('- ')) {
@@ -2389,6 +2381,7 @@ export class FractalView extends TextFileView {
 					}).join('\n');
 					editor.replaceSelection(formatted);
 					break;
+				}
 			}
 			editor.focus();
 		} else {
@@ -2418,10 +2411,11 @@ export class FractalView extends TextFileView {
 				case 'link':
 					replacement = selection.startsWith('[[') && selection.endsWith(']]') ? selection.slice(2, -2) : '[[' + selection + ']]';
 					break;
-				case 'list':
+				case 'list': {
 					const lines = selection.split('\n');
 					replacement = lines.map((line: string) => line.startsWith('- ') ? line.substring(2) : '- ' + line).join('\n');
 					break;
+				}
 			}
 			
 			textarea.value = text.substring(0, start) + replacement + text.substring(end);
@@ -2742,7 +2736,7 @@ export class FractalView extends TextFileView {
 		container.style.setProperty("--fractal-column-width", `${this.plugin.settings.columnWidth}px`);
 		const inactiveHeight = this.plugin.settings.inactiveCardHeight || 300;
 		if (inactiveHeight >= 300) {
-			container.style.setProperty("--fractal-inactive-card-height", "auto");
+			container.style.removeProperty("--fractal-inactive-card-height");
 		} else {
 			const scaledHeight = inactiveHeight * this.plugin.settings.zoom;
 			container.style.setProperty("--fractal-inactive-card-height", `${scaledHeight}px`);
@@ -2787,8 +2781,6 @@ export class FractalView extends TextFileView {
 		}
 		viewContent.setAttribute("data-theme", mode);
 
-		const toolbar = this.contentEl.querySelector(".fractal-header-toolbar") as HTMLElement;
-
 		if (mode === "obsidian-theme") {
 			viewContent.style.removeProperty("--fractal-custom-canvas-bg");
 			viewContent.style.removeProperty("--fractal-custom-active-bg");
@@ -2797,10 +2789,6 @@ export class FractalView extends TextFileView {
 			viewContent.style.removeProperty("--fractal-custom-text-color");
 			viewContent.style.removeProperty("--fractal-custom-title-color");
 			viewContent.style.removeProperty("--fractal-custom-aura-color");
-			if (toolbar) {
-				toolbar.style.backgroundColor = "var(--background-secondary-alt)";
-				toolbar.style.borderColor = "var(--background-modifier-border)";
-			}
 		} else if (mode === "custom") {
 			viewContent.style.setProperty("--fractal-custom-canvas-bg", this.plugin.settings.canvasBgColor);
 			viewContent.style.setProperty("--fractal-custom-active-bg", this.plugin.settings.activeCardColor);
@@ -2811,11 +2799,6 @@ export class FractalView extends TextFileView {
 			
 			const contrastColor = getContrastColor(this.plugin.settings.activeCardColor);
 			viewContent.style.setProperty("--fractal-custom-active-text", contrastColor);
-
-			if (toolbar) {
-				toolbar.style.backgroundColor = "var(--background-secondary-alt)";
-				toolbar.style.borderColor = "var(--background-modifier-border)";
-			}
 		}
 	}
 
@@ -2915,7 +2898,7 @@ export class FractalView extends TextFileView {
 						if (inlineView.__fractalReady) {
 							try {
 								val = inlineView.getViewData();
-							} catch (err) {
+							} catch {
 								val = this.root.content || "";
 							}
 						}
@@ -2937,7 +2920,7 @@ export class FractalView extends TextFileView {
 					if (inlineView.__fractalReady) {
 						try {
 							val = inlineView.getViewData();
-						} catch (err) {
+						} catch {
 							val = this.root.content || "";
 						}
 					}
@@ -3057,7 +3040,7 @@ export class FractalView extends TextFileView {
 		let props: any = {};
 		try {
 			props = parseYaml(this.frontmatter);
-		} catch (e) {
+		} catch {
 			props = parseYAML(this.frontmatter); // fallback
 		}
 		
@@ -3190,7 +3173,7 @@ export class FractalView extends TextFileView {
 					if (inlineView.__fractalReady) {
 						try {
 							val = inlineView.getViewData();
-						} catch (err) {
+						} catch {
 							val = rawYamlDoc;
 						}
 					}
@@ -3216,7 +3199,7 @@ export class FractalView extends TextFileView {
 				if (inlineView.__fractalReady) {
 					try {
 						val = inlineView.getViewData();
-					} catch (err) {
+					} catch {
 						val = rawYamlDoc;
 					}
 				}
@@ -3238,10 +3221,9 @@ export class FractalView extends TextFileView {
 		} catch (error) {
 			console.error("Failed to initialize MarkdownView for properties editor:", error);
 			const textarea = editorContainer.createEl("textarea", {
-				cls: "fractal-card-edit-body fractal-card-edit-body-raw"
+				cls: "fractal-card-edit-body fractal-card-edit-body-raw fractal-yaml-edit-raw"
 			});
 			textarea.value = this.frontmatter || "";
-			textarea.style.minHeight = "120px";
 
 			textarea.addEventListener("keydown", (e) => {
 				e.stopPropagation();
@@ -3405,7 +3387,7 @@ export class FractalView extends TextFileView {
 					this.app.workspace._activeEditor = inlineView;
 				});
 				
-				requestAnimationFrame(() => {
+				window.requestAnimationFrame(() => {
 					titleInput.focus();
 					if (card.title === "New card") {
 						titleInput.select();
@@ -3436,7 +3418,7 @@ export class FractalView extends TextFileView {
 			}
 			
 			// Always default to focusing the title first
-			requestAnimationFrame(() => {
+			window.requestAnimationFrame(() => {
 				titleInput.focus();
 				if (card.title === "New card") {
 					titleInput.select();
@@ -3481,7 +3463,7 @@ export class FractalView extends TextFileView {
 
 			const handleBlur = (evt: FocusEvent) => {
 				if (this.editBlurTimeout) {
-					clearTimeout(this.editBlurTimeout);
+					window.clearTimeout(this.editBlurTimeout);
 				}
 				this.editBlurTimeout = window.setTimeout(() => {
 					const activeEl = document.activeElement;
@@ -4362,7 +4344,7 @@ export class FractalView extends TextFileView {
 		this.selectedLevel = level;
 		this.renderFractal();
 
-		setTimeout(() => {
+		window.setTimeout(() => {
 			const activeEl = this.contentEl.querySelector(".fractal-card.active") as HTMLElement;
 			const viewContainer = this.contentEl.querySelector(".fractal-view-container") as HTMLElement;
 			if (activeEl && viewContainer) {
@@ -4588,13 +4570,13 @@ export default class FractalPlugin extends Plugin {
 				};
 
 				// Execute multiple times to override Obsidian's async layout & native scroll-restore mechanisms
-				setTimeout(focusHeading, 50);
-				setTimeout(focusHeading, 150);
-				setTimeout(focusHeading, 300);
-				setTimeout(focusHeading, 600);
+				window.setTimeout(focusHeading, 50);
+				window.setTimeout(focusHeading, 150);
+				window.setTimeout(focusHeading, 300);
+				window.setTimeout(focusHeading, 600);
 			}
 		}
-		setTimeout(() => {
+		window.setTimeout(() => {
 			this.togglingView = false;
 		}, 500);
 	}
