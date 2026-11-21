@@ -16,7 +16,7 @@
 		"markdown"
 	],
 	"author": "Alessandro Abrami",
-	"license": "MIT",
+	"license": "AGPL-3.0",
 	"devDependencies": {
 		"@types/node": "^18.11.9",
 		"esbuild": "0.19.11",

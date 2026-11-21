@@ -1,7 +1,7 @@
 # Fractal
 
 [![GitHub release](https://img.shields.io/github/v/release/ide-ale/obsidian-fractal?style=flat-square)](https://github.com/ide-ale/obsidian-fractal/releases/latest)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg?style=flat-square)](LICENSE)
 [![Obsidian Desktop & Mobile](https://img.shields.io/badge/Obsidian-Desktop%20%26%20Mobile-7c3aed?style=flat-square)](https://obsidian.md)
 [![Support me on Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20my%20work-FF5E5B?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/alessandroabrami)
 
@@ -110,4 +110,4 @@ Developed by **Alessandro Abrami** ([GitHub](https://github.com/ide-ale)).
 
 ## License
 
-Licensed under the [MIT License](LICENSE).
+Licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE).
