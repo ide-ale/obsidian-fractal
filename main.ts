@@ -13,6 +13,7 @@ import {
 	Plugin,
 	PluginSettingTab,
 	Setting,
+	SettingDefinitionItem,
 	WorkspaceLeaf,
 	TextFileView,
 	MarkdownRenderer,
@@ -23,7 +24,8 @@ import {
 	parseYaml,
 	Component,
 	setIcon,
-	MarkdownView
+	MarkdownView,
+	requireApiVersion
 } from "obsidian";
 
 // Unique identifier for the Fractal View
@@ -352,25 +354,28 @@ function parseYAML(yamlStr: string): Record<string, string> {
 // Strip markdown syntax and get a clean plain text preview
 function getPlainPreview(text: string, limit = 150): string {
 	if (!text) return "";
-	
-	// Remove HTML tags
+
+	// Remove HTML tags and embedded images/files
 	let plain = text.replace(/<[^>]*>/g, "");
-	
+	plain = plain.replace(/!\[\[([^\]]+)\]\]/g, "");
+	plain = plain.replace(/!\[([^\]]*)\]\([^)]*\)/g, "");
+
 	// Remove markdown formatting
 	plain = plain.replace(/^(#{1,6})\s+/gm, ""); // headers
+	plain = plain.replace(/^\s*(?:>\s*)*\[![a-zA-Z0-9_-]+\][+-]?\s*/gm, ""); // callout headers
+	plain = plain.replace(/^\s*>\s*/gm, ""); // blockquotes
 	plain = plain.replace(/(\*\*|__)(.*?)\1/g, "$2"); // bold
 	plain = plain.replace(/(\*|_)(.*?)\1/g, "$2"); // italic
 	plain = plain.replace(/^\s*[-*+]\s+/gm, ""); // bullets
-	plain = plain.replace(/^\s*>\s*/gm, ""); // blockquotes
 	plain = plain.replace(/```[\s\S]*?```/g, "[Code]"); // code blocks
 	plain = plain.replace(/`([^`]+)`/g, "$1"); // inline code
+	plain = plain.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1"); // markdown links
+	plain = plain.replace(/\[\[[^|\]]+\|([^\]]+)\]\]/g, "$1"); // aliased wikilinks
 	plain = plain.replace(/\[\[([^\]]+)\]\]/g, "$1"); // wikilinks
-	
-	// Replace double newlines or newlines with spaces for a single line preview
-	plain = plain.replace(/\n+/g, " ");
-	
-	// Trim and truncate
-	plain = plain.trim();
+
+	// Normalize newlines and repeated spaces for a single line preview
+	plain = plain.replace(/\s+/g, " ").trim();
+
 	if (plain.length > limit) {
 		return plain.substring(0, limit) + "...";
 	}
@@ -520,7 +525,11 @@ class ConfirmModal extends Modal {
 		setting.addButton((btn) => {
 			btn.setButtonText(this.confirmText);
 			if (this.isWarning) {
-				btn.setWarning();
+				if (requireApiVersion("1.13.0")) {
+					btn.setDestructive();
+				} else {
+					btn.buttonEl.addClass("mod-warning");
+				}
 			} else {
 				btn.setCta();
 			}
@@ -582,6 +591,7 @@ export class FractalView extends TextFileView {
 	originalCardTitle: string | null = null;
 	originalCardContent: string | null = null;
 	activeEditorInstance: InlineMarkdownView | null = null;
+	activeEditorObserver: MutationObserver | null = null;
 	renderGeneration: number = 0;
 	renderedCardState: WeakMap<HTMLElement, { title: string; content: string; expanded: boolean; childCount: number }> = new WeakMap();
 	renderedCardComponents: Map<HTMLElement, Component> = new Map();
@@ -674,6 +684,10 @@ export class FractalView extends TextFileView {
 	}
 
 	cleanupActiveEditor() {
+		if (this.activeEditorObserver) {
+			this.activeEditorObserver.disconnect();
+			this.activeEditorObserver = null;
+		}
 		if (this.activeEditorInstance) {
 			try {
 				// @ts-expect-error -- undocumented Obsidian workspace property
@@ -890,40 +904,53 @@ export class FractalView extends TextFileView {
 		if (!columnsContainer) return;
 
 		const columns = Array.from(columnsContainer.querySelectorAll<HTMLElement>(".fractal-column"));
-		
+
 		if (!this.plugin.settings.centeredNavigation) {
-			columns.forEach(col => {
+			columnsContainer.removeClass("is-centered-nav");
+			columns.forEach((col) => {
 				col.style.removeProperty("transform");
 			});
 			columnsContainer.style.removeProperty("height");
+			columnsContainer.style.removeProperty("min-height");
 			return;
 		}
 
+		// Switch flex container to top alignment so translateY positions each active card
+		// cleanly against the canvas center instead of stacking with align-items: center.
+		columnsContainer.addClass("is-centered-nav");
+		columnsContainer.style.removeProperty("height");
+
 		const viewportHeight = container.clientHeight || 600;
 		const baseline = viewportHeight / 2;
-		let maxColumnHeight = 0;
+		const computedStyle = window.getComputedStyle(columnsContainer);
+		const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
+		const paddingBottom = parseFloat(computedStyle.paddingBottom) || 0;
 
-		columns.forEach(col => {
-			let cardEl = col.querySelector(".fractal-card.active") as HTMLElement;
-			if (!cardEl) {
-				cardEl = col.querySelector(".fractal-card.illuminated") as HTMLElement;
-			}
-
+		const centers = columns.map((col) => {
+			const cardEl =
+				(col.querySelector(".fractal-card.active") as HTMLElement | null) ||
+				(col.querySelector(".fractal-card.illuminated") as HTMLElement | null);
 			if (cardEl) {
-				const cardCenter = cardEl.offsetTop + cardEl.offsetHeight / 2;
-				const translateY = baseline - cardCenter;
-				col.style.transform = `translateY(${translateY}px)`;
-				
-				const colHeight = col.scrollHeight + Math.abs(translateY);
-				if (colHeight > maxColumnHeight) {
-					maxColumnHeight = colHeight;
-				}
-			} else {
-				col.style.transform = `translateY(${baseline - 50}px)`;
+				return cardEl.offsetTop + cardEl.offsetHeight / 2;
+			}
+			return col.offsetHeight / 2;
+		});
+
+		const maxCenter = centers.reduce((max, c) => (c > max ? c : max), 0);
+		const targetCenterY = Math.max(baseline, maxCenter + paddingTop);
+		let maxBottom = 0;
+
+		columns.forEach((col, index) => {
+			const translateY = Math.max(0, targetCenterY - paddingTop - centers[index]);
+			col.style.transform = `translateY(${translateY}px)`;
+			const bottom = translateY + col.offsetHeight;
+			if (bottom > maxBottom) {
+				maxBottom = bottom;
 			}
 		});
 
-		columnsContainer.style.height = `${maxColumnHeight + baseline}px`;
+		const neededMinHeight = Math.max(viewportHeight, paddingTop + maxBottom + paddingBottom);
+		columnsContainer.style.minHeight = `${neededMinHeight}px`;
 	}
 
 	constructor(leaf: WorkspaceLeaf, plugin: FractalPlugin) {
@@ -1345,7 +1372,7 @@ export class FractalView extends TextFileView {
 		});
 
 		// --- LAYOUT POPOVER WRAPPER & BUTTON & MENU ---
-		const layoutWrapper = controls.createDiv({ cls: "fractal-popover-wrapper" });
+		const layoutWrapper = viewSettingsGroup.createDiv({ cls: "fractal-popover-wrapper" });
 		const btnLayout = layoutWrapper.createEl("button", {
 			cls: "fractal-toolbar-btn layout-popover-btn",
 			title: "Layout and zoom settings"
@@ -2868,48 +2895,7 @@ export class FractalView extends TextFileView {
 			editorContainer.addEventListener("dblclick", stopProp);
 
 			try {
-				this.cleanupActiveEditor();
-				const inlineView = new MarkdownView({
-					containerEl: editorContainer,
-					app: this.app,
-					workspace: this.app.workspace,
-					history: {
-						backHistory: [],
-						forwardHistory: [],
-					},
-				} as never) as InlineMarkdownView;
-				
-				inlineView.save = async () => {};
-				inlineView.requestSave = () => {};
-				const origSetViewData = inlineView.setViewData.bind(inlineView);
-				inlineView.__setViewData__ = origSetViewData;
-				inlineView.setViewData = () => {};
-				
-				this.activeEditorInstance = inlineView;
-				inlineView.__fractalReady = false;
-				
-				if (inlineView.getMode() === 'preview') {
-					void inlineView.setState({ mode: 'source' }, { history: false });
-				}
-				
-				if (this.file) {
-					const targetFile = this.file;
-					inlineView.file = targetFile;
-					void inlineView.onUnloadFile(targetFile).then(() => {
-						if (this.activeEditorInstance !== inlineView) return;
-						origSetViewData(this.root.content || "", true);
-						inlineView.__fractalReady = true;
-						void inlineView.onLoadFile(targetFile);
-					});
-				} else {
-					origSetViewData(this.root.content || "", true);
-					inlineView.__fractalReady = true;
-				}
-				
-				editorContainer.addEventListener("focusin", () => {
-					// @ts-expect-error -- undocumented Obsidian workspace property
-					this.app.workspace._activeEditor = inlineView;
-				});
+				const inlineView = this.createInlineMarkdownEditor(editorContainer, this.root.content || "");
 
 				editorContainer.addEventListener("keydown", (e) => {
 					if (e.key === "Escape") {
@@ -3147,48 +3133,7 @@ export class FractalView extends TextFileView {
 		const rawYamlDoc = `---\n${this.frontmatter || ""}\n---`;
 
 		try {
-			this.cleanupActiveEditor();
-			const inlineView = new MarkdownView({
-				containerEl: editorContainer,
-				app: this.app,
-				workspace: this.app.workspace,
-				history: {
-					backHistory: [],
-					forwardHistory: [],
-				},
-			} as never) as InlineMarkdownView;
-			
-			inlineView.save = async () => {};
-			inlineView.requestSave = () => {};
-			const origSetViewData = inlineView.setViewData.bind(inlineView);
-			inlineView.__setViewData__ = origSetViewData;
-			inlineView.setViewData = () => {};
-			
-			this.activeEditorInstance = inlineView;
-			inlineView.__fractalReady = false;
-			
-			if (inlineView.getMode() === 'preview') {
-				void inlineView.setState({ mode: 'source' }, { history: false });
-			}
-			
-			if (this.file) {
-				const targetFile = this.file;
-				inlineView.file = targetFile;
-				void inlineView.onUnloadFile(targetFile).then(() => {
-					if (this.activeEditorInstance !== inlineView) return;
-					origSetViewData(rawYamlDoc, true);
-					inlineView.__fractalReady = true;
-					void inlineView.onLoadFile(targetFile);
-				});
-			} else {
-				origSetViewData(rawYamlDoc, true);
-				inlineView.__fractalReady = true;
-			}
-
-			editorContainer.addEventListener("focusin", () => {
-				// @ts-expect-error -- undocumented Obsidian workspace property
-				this.app.workspace._activeEditor = inlineView;
-			});
+			const inlineView = this.createInlineMarkdownEditor(editorContainer, rawYamlDoc);
 
 			editorContainer.addEventListener("keydown", (e) => {
 				if (e.key === "Escape") {
@@ -3329,6 +3274,111 @@ export class FractalView extends TextFileView {
 		void this.renderFractal();
 	}
 
+	/**
+	 * Mount an isolated MarkdownView in Live Preview mode for inline card/metadata editing.
+	 * Avoids calling onLoadFile() after setting fragment text so full-file metadata offsets
+	 * never leak into a single card's Live Preview widgets.
+	 */
+	private createInlineMarkdownEditor(editorContainer: HTMLElement, initialContent: string): InlineMarkdownView {
+		this.cleanupActiveEditor();
+		const inlineView = new MarkdownView({
+			containerEl: editorContainer,
+			app: this.app,
+			workspace: this.app.workspace,
+			history: {
+				backHistory: [],
+				forwardHistory: [],
+			},
+		} as never) as InlineMarkdownView;
+
+		inlineView.save = async () => {};
+		inlineView.requestSave = () => {};
+		const origSetViewData = inlineView.setViewData.bind(inlineView);
+		inlineView.__setViewData__ = origSetViewData;
+		inlineView.setViewData = () => {};
+
+		this.activeEditorInstance = inlineView;
+		inlineView.__fractalReady = false;
+
+		if (this.file) {
+			inlineView.file = this.file;
+		}
+
+		// Force Live Preview (source: false) before populating fragment content
+		void inlineView
+			.setState({ mode: "source", source: false }, { history: false })
+			.then(() => {
+				if (this.activeEditorInstance !== inlineView) return;
+				origSetViewData(initialContent, true);
+				inlineView.__fractalReady = true;
+				window.requestAnimationFrame(() => {
+					if (this.activeEditorInstance !== inlineView) return;
+					const editorWithCm = inlineView.editor as { cm?: { requestMeasure?: () => void } } | undefined;
+					editorWithCm?.cm?.requestMeasure?.();
+					clampQuoteLineIndent();
+				});
+			});
+
+		let applyingIndentFix = false;
+		const clampQuoteLineIndent = () => {
+			if (applyingIndentFix) return;
+			applyingIndentFix = true;
+			try {
+				const quoteLines = Array.from(editorContainer.querySelectorAll<HTMLElement>(".cm-line.HyperMD-quote, .cm-line.HyperMD-callout"));
+				for (const line of quoteLines) {
+					const cs = window.getComputedStyle(line);
+					const pLeft = parseFloat(cs.paddingLeft || "0");
+					const pInlineStart = parseFloat(cs.paddingInlineStart || "0");
+					const tIndent = parseFloat(cs.textIndent || "0");
+					if (pLeft > 72 || pInlineStart > 72 || tIndent < -72) {
+						line.setCssProps({
+							"padding-left": "14px",
+							"padding-inline-start": "14px",
+							"text-indent": "-10px"
+						});
+					}
+				}
+				if (editorContainer.closest(".fractal-card")) {
+					const cmContent = editorContainer.querySelector<HTMLElement>(".cm-editor .cm-content");
+					if (cmContent) {
+						const contentStyle = window.getComputedStyle(cmContent);
+						const pTop = parseFloat(contentStyle.paddingTop || "0");
+						const pBottom = parseFloat(contentStyle.paddingBottom || "0");
+						const minH = parseFloat(contentStyle.minHeight || "0");
+						if (pTop > 6 || pBottom > 8 || minH > 0) {
+							cmContent.setCssProps({
+								"padding-top": "2px",
+								"padding-bottom": "4px",
+								"min-height": "0px"
+							});
+						}
+					}
+				}
+			} finally {
+				applyingIndentFix = false;
+			}
+		};
+
+		const observer = new MutationObserver(() => {
+			clampQuoteLineIndent();
+		});
+		observer.observe(editorContainer, {
+			attributes: true,
+			attributeFilter: ["style", "class"],
+			childList: true,
+			subtree: true,
+		});
+		this.activeEditorObserver = observer;
+
+		editorContainer.addEventListener("focusin", () => {
+			// @ts-expect-error -- undocumented Obsidian workspace property
+			this.app.workspace._activeEditor = inlineView;
+			clampQuoteLineIndent();
+		});
+
+		return inlineView;
+	}
+
 	// Render Generic Card
 	async renderCard(parent: HTMLElement, card: FractalCard, level: number, isActive: boolean) {
 		const colorClass = this.file ? (this.plugin.settings.cardColors[this.file.path]?.[card.id] || "") : "";
@@ -3369,50 +3419,7 @@ export class FractalView extends TextFileView {
 			editorContainer.addEventListener("dblclick", stopProp);
 
 			try {
-				this.cleanupActiveEditor();
-				// Use MarkdownView directly without calling load()
-				const inlineView = new MarkdownView({
-					containerEl: editorContainer,
-					app: this.app,
-					workspace: this.app.workspace,
-					history: {
-						backHistory: [],
-						forwardHistory: [],
-					},
-				} as never) as InlineMarkdownView;
-				
-				inlineView.save = async () => {};
-				inlineView.requestSave = () => {};
-				const origSetViewData = inlineView.setViewData.bind(inlineView);
-				inlineView.__setViewData__ = origSetViewData;
-				inlineView.setViewData = () => {};
-				
-				this.activeEditorInstance = inlineView;
-				inlineView.__fractalReady = false;
-				
-				if (inlineView.getMode() === 'preview') {
-					void inlineView.setState({ mode: 'source' }, { history: false });
-				}
-				
-				// Set file and content
-				if (this.file) {
-					const targetFile = this.file;
-					inlineView.file = targetFile;
-					void inlineView.onUnloadFile(targetFile).then(() => {
-						if (this.activeEditorInstance !== inlineView) return;
-						origSetViewData(card.content || "", true);
-						inlineView.__fractalReady = true;
-						void inlineView.onLoadFile(targetFile);
-					});
-				} else {
-					origSetViewData(card.content || "", true);
-					inlineView.__fractalReady = true;
-				}
-				
-				editorContainer.addEventListener("focusin", () => {
-					// @ts-expect-error -- undocumented Obsidian workspace property
-					this.app.workspace._activeEditor = inlineView;
-				});
+				const inlineView = this.createInlineMarkdownEditor(editorContainer, card.content || "");
 				
 				window.requestAnimationFrame(() => {
 					titleInput.focus();
@@ -4632,109 +4639,130 @@ class FractalSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
+	private refreshOpenViews(clearExpanded = false): void {
+		const leaves = this.plugin.app.workspace.getLeavesOfType(VIEW_TYPE_FRACTAL);
+		for (const leaf of leaves) {
+			if (leaf.view instanceof FractalView) {
+				if (clearExpanded) {
+					leaf.view.expandedCardIds.clear();
+				}
+				void leaf.view.renderFractal();
+			}
+		}
+	}
+
+	private buildDescriptors(): Array<{
+		name: string;
+		desc: string;
+		render: (setting: Setting) => void;
+	}> {
+		return [
+			{
+				name: "Column width",
+				desc: "Set the default column width for all notes (from 300px to 800px).",
+				render: (setting) => {
+					setting.addSlider((slider) =>
+						slider
+							.setLimits(300, 800, 10)
+							.setValue(this.plugin.settings.columnWidth)
+							.onChange(async (value) => {
+								this.plugin.settings.columnWidth = value;
+								await this.plugin.saveSettings();
+								this.refreshOpenViews();
+							})
+					);
+				}
+			},
+			{
+				name: "Section behavior",
+				desc: "Choose whether cards should remain expanded after deselection or collapse back to preview mode.",
+				render: (setting) => {
+					setting.addDropdown((dropdown) =>
+						dropdown
+							.addOption("preview", "View preview after selection")
+							.addOption("keep", "Keep open after selection")
+							.setValue(this.plugin.settings.sectionBehavior || "preview")
+							.onChange(async (value) => {
+								this.plugin.settings.sectionBehavior = value as "keep" | "preview";
+								await this.plugin.saveSettings();
+								this.refreshOpenViews(true);
+							})
+					);
+				}
+			},
+			{
+				name: "Open notes in Fractal view by default",
+				desc: "Automatically open Markdown notes in Fractal view when clicking on them.",
+				render: (setting) => {
+					setting.addToggle((toggle) =>
+						toggle
+							.setValue(this.plugin.settings.openByDefault || false)
+							.onChange(async (value) => {
+								this.plugin.settings.openByDefault = value;
+								await this.plugin.saveSettings();
+							})
+					);
+				}
+			},
+			{
+				name: "Centered navigation",
+				desc: "Keep the active card centered in the viewport when navigating.",
+				render: (setting) => {
+					setting.addToggle((toggle) =>
+						toggle
+							.setValue(this.plugin.settings.centeredNavigation || false)
+							.onChange(async (value) => {
+								this.plugin.settings.centeredNavigation = value;
+								await this.plugin.saveSettings();
+								const leaves = this.plugin.app.workspace.getLeavesOfType(VIEW_TYPE_FRACTAL);
+								for (const leaf of leaves) {
+									if (leaf.view instanceof FractalView) {
+										leaf.view.applyCenteredLayout();
+									}
+								}
+							})
+					);
+				}
+			},
+			{
+				name: "Clear style data",
+				desc: "Clear all saved card colors and column/node collapse states.",
+				render: (setting) => {
+					setting.addButton((btn) =>
+						btn.setButtonText("Clear data").onClick(() => {
+							new ConfirmModal(this.app, {
+								title: "Clear style data",
+								message: "Are you sure you want to clear all note color customizations and collapse states?",
+								confirmText: "Clear data",
+								isWarning: true,
+								onConfirm: async () => {
+									this.plugin.settings.cardColors = {};
+									this.plugin.settings.collapsedNodes = {};
+									this.plugin.settings.collapsedColumns = {};
+									this.plugin.settings.zoom = 1.0;
+									await this.plugin.saveSettings();
+									new Notice("All style settings have been reset.");
+									this.refreshOpenViews();
+								}
+							}).open();
+						})
+					);
+				}
+			}
+		];
+	}
+
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		return this.buildDescriptors();
+	}
+
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		new Setting(containerEl)
-			.setName("Column width")
-			.setDesc("Set the default column width for all notes (from 300px to 800px).")
-			.addSlider((slider) =>
-				slider
-					.setLimits(300, 800, 10)
-					.setValue(this.plugin.settings.columnWidth)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.columnWidth = value;
-						await this.plugin.saveSettings();
-						// Re-render open Fractal views instantly
-						const leaves = this.plugin.app.workspace.getLeavesOfType(VIEW_TYPE_FRACTAL);
-						for (const leaf of leaves) {
-							if (leaf.view instanceof FractalView) {
-								void leaf.view.renderFractal();
-							}
-						}
-					})
-			);
-
-		new Setting(containerEl)
-			.setName("Section behavior")
-			.setDesc("Choose whether cards should remain expanded after deselection or collapse back to preview mode.")
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption("preview", "View preview after selection")
-					.addOption("keep", "Keep open after selection")
-					.setValue(this.plugin.settings.sectionBehavior || "preview")
-					.onChange(async (value) => {
-						this.plugin.settings.sectionBehavior = value as "keep" | "preview";
-						await this.plugin.saveSettings();
-						const leaves = this.plugin.app.workspace.getLeavesOfType(VIEW_TYPE_FRACTAL);
-						for (const leaf of leaves) {
-							if (leaf.view instanceof FractalView) {
-								leaf.view.expandedCardIds.clear();
-								void leaf.view.renderFractal();
-							}
-						}
-					})
-			);
-
-		new Setting(containerEl)
-			.setName("Open notes in Fractal view by default")
-			.setDesc("Automatically open Markdown notes in Fractal view when clicking on them.")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.openByDefault || false)
-					.onChange(async (value) => {
-						this.plugin.settings.openByDefault = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName("Centered navigation")
-			.setDesc("Keep the active card centered in the viewport when navigating.")
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.centeredNavigation || false)
-					.onChange(async (value) => {
-						this.plugin.settings.centeredNavigation = value;
-						await this.plugin.saveSettings();
-						const leaves = this.plugin.app.workspace.getLeavesOfType(VIEW_TYPE_FRACTAL);
-						for (const leaf of leaves) {
-							if (leaf.view instanceof FractalView) {
-								leaf.view.applyCenteredLayout();
-							}
-						}
-					})
-			);
-
-		new Setting(containerEl)
-			.setName("Clear style data")
-			.setDesc("Clear all saved card colors and column/node collapse states.")
-			.addButton((btn) =>
-				btn.setButtonText("Clear data").onClick(() => {
-					new ConfirmModal(this.app, {
-						title: "Clear style data",
-						message: "Are you sure you want to clear all note color customizations and collapse states?",
-						confirmText: "Clear data",
-						isWarning: true,
-						onConfirm: async () => {
-							this.plugin.settings.cardColors = {};
-							this.plugin.settings.collapsedNodes = {};
-							this.plugin.settings.collapsedColumns = {};
-							this.plugin.settings.zoom = 1.0;
-							await this.plugin.saveSettings();
-							new Notice("All style settings have been reset.");
-							// Re-render open views
-							const leaves = this.plugin.app.workspace.getLeavesOfType(VIEW_TYPE_FRACTAL);
-							for (const leaf of leaves) {
-								if (leaf.view instanceof FractalView) {
-									void leaf.view.renderFractal();
-								}
-							}
-						}
-					}).open();
-				})
-			);
+		for (const def of this.buildDescriptors()) {
+			const setting = new Setting(containerEl).setName(def.name).setDesc(def.desc);
+			def.render(setting);
+		}
 	}
 }
