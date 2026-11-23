@@ -738,8 +738,7 @@
 
 .fractal-link-unresolved {
 	color: #e53e3e;
-	text-decoration-line: underline;
-	text-decoration-style: dashed;
+	border-bottom: 1px dashed currentColor;
 	opacity: 0.85;
 }
 

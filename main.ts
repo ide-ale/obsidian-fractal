@@ -3787,7 +3787,11 @@ export class FractalView extends TextFileView {
 							if ("clientX" in evt) {
 								submenu.showAtMouseEvent(evt);
 							} else {
-								submenu.showAtPosition({ x: 0, y: 0 });
+								const rect = cardEl.getBoundingClientRect();
+								submenu.showAtMouseEvent(new MouseEvent("contextmenu", {
+									clientX: rect.left + rect.width / 2,
+									clientY: rect.top + rect.height / 2
+								}));
 							}
 						});
 					}
