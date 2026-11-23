@@ -928,8 +928,8 @@ export class FractalView extends TextFileView {
 
 		const centers = columns.map((col) => {
 			const cardEl =
-				(col.querySelector(".fractal-card.active") as HTMLElement | null) ||
-				(col.querySelector(".fractal-card.illuminated") as HTMLElement | null);
+				col.querySelector<HTMLElement>(".fractal-card.active") ||
+				col.querySelector<HTMLElement>(".fractal-card.illuminated");
 			if (cardEl) {
 				return cardEl.offsetTop + cardEl.offsetHeight / 2;
 			}
@@ -3331,11 +3331,10 @@ export class FractalView extends TextFileView {
 					const pInlineStart = parseFloat(cs.paddingInlineStart || "0");
 					const tIndent = parseFloat(cs.textIndent || "0");
 					if (pLeft > 72 || pInlineStart > 72 || tIndent < -72) {
-						line.setCssProps({
-							"padding-left": "14px",
-							"padding-inline-start": "14px",
-							"text-indent": "-10px"
-						});
+						line.style.removeProperty("padding-left");
+						line.style.removeProperty("padding-inline-start");
+						line.style.removeProperty("text-indent");
+						line.addClass("fractal-quote-indent-reset");
 					}
 				}
 				if (editorContainer.closest(".fractal-card")) {
@@ -3346,11 +3345,10 @@ export class FractalView extends TextFileView {
 						const pBottom = parseFloat(contentStyle.paddingBottom || "0");
 						const minH = parseFloat(contentStyle.minHeight || "0");
 						if (pTop > 6 || pBottom > 8 || minH > 0) {
-							cmContent.setCssProps({
-								"padding-top": "2px",
-								"padding-bottom": "4px",
-								"min-height": "0px"
-							});
+							cmContent.style.removeProperty("padding-top");
+							cmContent.style.removeProperty("padding-bottom");
+							cmContent.style.removeProperty("min-height");
+							cmContent.addClass("fractal-cm-content-compact");
 						}
 					}
 				}
@@ -3419,7 +3417,7 @@ export class FractalView extends TextFileView {
 			editorContainer.addEventListener("dblclick", stopProp);
 
 			try {
-				const inlineView = this.createInlineMarkdownEditor(editorContainer, card.content || "");
+				this.createInlineMarkdownEditor(editorContainer, card.content || "");
 				
 				window.requestAnimationFrame(() => {
 					titleInput.focus();

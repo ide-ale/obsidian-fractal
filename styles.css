@@ -1978,7 +1978,8 @@ body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view
     margin: 0;
     min-height: 0;
 }
-.workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor .cm-editor .cm-content {
+.workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor .cm-editor .cm-content,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-card .lineage-inline-editor .cm-editor .cm-content.fractal-cm-content-compact {
     padding: 2px 2px 4px 2px;
     margin: 0;
     min-height: 0;
@@ -1990,6 +1991,11 @@ body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view
     overflow-wrap: break-word;
     max-width: 100%;
     box-sizing: border-box;
+}
+.workspace-leaf-content[data-type="fractal-view"] .fractal-card .lineage-inline-editor .cm-editor .cm-line.fractal-quote-indent-reset {
+    padding-left: 14px;
+    padding-inline-start: 14px;
+    text-indent: -10px;
 }
 .workspace-leaf-content[data-type="fractal-view"] .fractal-card .lineage-inline-editor .cm-table-widget {
     max-width: 100%;
