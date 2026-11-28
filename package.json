@@ -1,6 +1,6 @@
 {
 	"name": "fractal",
-	"version": "1.0.4",
+	"version": "1.0.5",
 	"description": "Visualize and edit Obsidian notes in a column-based card tree layout using standard Markdown heading hierarchy.",
 	"main": "main.js",
 	"scripts": {

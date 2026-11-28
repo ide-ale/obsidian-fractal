@@ -86,6 +86,8 @@ interface FractalSettings {
 	sectionBehavior: "keep" | "preview"; // Section behavior: keep open or view preview
 	openByDefault: boolean; // Automatically open notes in Fractal view
 	customTitleColor: string; // Custom theme title color
+	defaultVisualization: "default" | "mindmap"; // Default layout visualization
+	showMindMapConnectors: boolean; // Show orthogonal connectors in Mind-Map mode
 }
 
 const DEFAULT_SETTINGS: FractalSettings = {
@@ -113,7 +115,9 @@ const DEFAULT_SETTINGS: FractalSettings = {
 	autoCardSpacing: true,
 	sectionBehavior: "preview",
 	openByDefault: false,
-	customTitleColor: "#ebf8ff"
+	customTitleColor: "#ebf8ff",
+	defaultVisualization: "default",
+	showMindMapConnectors: true
 };
 
 function getHeadingIdAtCursor(markdownView: MarkdownView, app: App): string | null {
@@ -439,7 +443,7 @@ function postProcessRenderedMarkdown(el: HTMLElement, app?: App, sourcePath?: st
 
 	// 2. Convert [ ] and [x] in list items (and unrendered lists in paragraphs) into checkboxes
 	// Sometimes Obsidian fails to parse lists inside blockquotes, leaving them as text starting with "1. [ ]"
-	const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+	const walker = activeDocument.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
 	const textNodesToCheck: Text[] = [];
 	let currNode: Node | null = walker.nextNode();
 	while (currNode) {
@@ -462,7 +466,7 @@ function postProcessRenderedMarkdown(el: HTMLElement, app?: App, sourcePath?: st
 			const parent = textNode.parentNode;
 			if (parent) {
 				// Keep the list marker (e.g. "1. ") but remove the "[ ]"
-				const markerText = document.createTextNode(checkMatch[1]);
+				const markerText = activeDocument.createTextNode(checkMatch[1]);
 				textNode.nodeValue = text.substring(checkMatch[0].length);
 				parent.insertBefore(markerText, textNode);
 				parent.insertBefore(checkbox, textNode);
@@ -729,8 +733,51 @@ export class FractalView extends TextFileView {
 	savedLeftCollapsed = true;
 	savedRightCollapsed = true;
 
+	// Mind-Map visualization state
+	currentVisualization: "default" | "mindmap" = "default";
+	mindMapExpandedNodeId: string | null = null;
+	mindMapObserver: ResizeObserver | null = null;
+	mindMapLayoutRaf: number | null = null;
+
 	// Active tab in custom color settings popover
 	activeColorTab: "Text" | "Title" | "Canvas" | "Active" | "Dimmed" | "Aura" = "Text";
+
+	cleanupMindMapObserver() {
+		if (this.mindMapLayoutRaf !== null) {
+			window.cancelAnimationFrame(this.mindMapLayoutRaf);
+			this.mindMapLayoutRaf = null;
+		}
+		if (this.mindMapObserver) {
+			this.mindMapObserver.disconnect();
+			this.mindMapObserver = null;
+		}
+	}
+
+	toggleVisualizationMode(targetMode?: "default" | "mindmap") {
+		this.saveActiveEdit();
+		this.editingYaml = false;
+		this.editingRootContent = false;
+		const nextMode = targetMode ?? (this.currentVisualization === "mindmap" ? "default" : "mindmap");
+		if (nextMode === this.currentVisualization) return;
+
+		this.currentVisualization = nextMode;
+		this.mindMapExpandedNodeId = null;
+
+		if (nextMode === "default") {
+			if (this.selectedLevel === 0) {
+				this.selectedLevel = 1;
+			}
+			this.ensureSelectionPath();
+			this.selectedLevel = Math.max(1, this.selectedLevel || this.getSelectedLevel() || 1);
+		} else {
+			if (!this.selectedLevel && this.selectedLevel !== 0) {
+				this.selectedLevel = this.root.children.length > 0 ? 1 : 0;
+			}
+			this.ensureSelectionPath();
+		}
+
+		void this.renderFractal();
+	}
 
 	pushHistory() {
 		const currentState = this.getViewData();
@@ -898,6 +945,7 @@ export class FractalView extends TextFileView {
 	}
 
 	applyCenteredLayout() {
+		if (this.currentVisualization === "mindmap") return;
 		const container = this.contentEl.querySelector(".fractal-view-container") as HTMLElement;
 		if (!container) return;
 		const columnsContainer = container.querySelector(".fractal-columns-container") as HTMLElement;
@@ -956,11 +1004,14 @@ export class FractalView extends TextFileView {
 	constructor(leaf: WorkspaceLeaf, plugin: FractalPlugin) {
 		super(leaf);
 		this.plugin = plugin;
+		this.currentVisualization = this.plugin.settings.defaultVisualization || "default";
 		
 		// Global document-level and window-level resize listeners
-		this.registerDomEvent(document, "keydown", (e: KeyboardEvent) => this.handleKeyDown(e));
+		this.registerDomEvent(activeDocument, "keydown", (e: KeyboardEvent) => this.handleKeyDown(e));
 		this.registerDomEvent(window, "resize", () => {
-			if (this.plugin.settings.centeredNavigation) {
+			if (this.currentVisualization === "mindmap") {
+				this.scheduleMindMapRelayout();
+			} else if (this.plugin.settings.centeredNavigation) {
 				this.applyCenteredLayout();
 			}
 		});
@@ -983,9 +1034,12 @@ export class FractalView extends TextFileView {
 			window.clearTimeout(this.cardClickTimeout);
 			this.cardClickTimeout = null;
 		}
+		this.cleanupMindMapObserver();
 		this.cleanupActiveEditor();
 		this.unloadAllCardComponents();
 		this.expandedCardIds.clear();
+		this.mindMapExpandedNodeId = null;
+		this.mindMapTreeRoot = null;
 		this.historyUndoStack = [];
 		this.historyRedoStack = [];
 		this.activeKeysByLevel = {};
@@ -1157,9 +1211,12 @@ export class FractalView extends TextFileView {
 		// Drag-to-pan Canvas Navigation
 		container.addEventListener("mousedown", (e) => {
 			const target = e.target as HTMLElement;
+			const isMindMapBg = !target.closest(".fractal-mindmap-node") &&
+				(target.classList.contains("fractal-mindmap-stage") || !!target.closest(".fractal-mindmap-svg"));
 			if (target.classList.contains("fractal-view-container") || 
 				target.classList.contains("fractal-columns-container") || 
-				target.classList.contains("fractal-column")) {
+				target.classList.contains("fractal-column") ||
+				isMindMapBg) {
 				this.isDraggingCanvas = true;
 				container.addClass("dragging");
 				this.dragStartX = e.pageX - container.offsetLeft;
@@ -1194,6 +1251,25 @@ export class FractalView extends TextFileView {
 	// Rebuild only the columns inside the canvas — called on every selection change.
 	// Preserves toolbar and canvas event listeners for a smooth, flash-free experience.
 	async refreshColumns(container: HTMLElement, oldScrollLeft: number, oldScrollTop: number, gen: number) {
+		if (this.currentVisualization === "mindmap") {
+			const oldCols = container.querySelector<HTMLElement>(".fractal-columns-container");
+			if (oldCols) {
+				this.unloadComponentsInContainer(oldCols);
+				oldCols.remove();
+			}
+			this.contentEl.removeClass("is-canvas-mode");
+			this.contentEl.addClass("is-mindmap-mode");
+			await this.refreshMindMap(container, oldScrollLeft, oldScrollTop, gen);
+			return;
+		}
+
+		const oldMindMap = container.querySelector<HTMLElement>(".fractal-mindmap-stage");
+		if (oldMindMap) {
+			this.cleanupMindMapObserver();
+			this.unloadComponentsInContainer(oldMindMap);
+			oldMindMap.remove();
+		}
+
 		let columnsContainer = container.querySelector(".fractal-columns-container") as HTMLElement;
 		if (!columnsContainer) {
 			columnsContainer = container.createDiv({ cls: "fractal-columns-container" });
@@ -1318,6 +1394,16 @@ export class FractalView extends TextFileView {
 
 		// Group Style and Layout popover buttons in a single group to match the new style
 		const viewSettingsGroup = controls.createDiv({ cls: "fractal-edit-toolbar-group" });
+
+		const toggleMindMapBtn = viewSettingsGroup.createEl("button", {
+			cls: `fractal-toolbar-btn mindmap-toggle-btn ${this.currentVisualization === "mindmap" ? "active" : ""}`,
+			text: "MindMap",
+			title: "Toggle Mind-map view"
+		});
+		toggleMindMapBtn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			this.toggleVisualizationMode();
+		});
 
 		const toggleZenBtn = viewSettingsGroup.createEl("button", {
 			cls: `fractal-toolbar-btn zen-toggle-btn ${this.isZenMode ? "active" : ""}`,
@@ -2121,6 +2207,44 @@ export class FractalView extends TextFileView {
 		// Initialize disabled state based on saved settings
 		updateAutoSpacingControlsState(this.plugin.settings.autoCardSpacing !== false);
 
+		// Divider 3: Mind-map options
+		layoutPopover.createEl("hr", { cls: "fractal-popover-divider" });
+
+		layoutPopover.createDiv({
+			cls: "fractal-popover-group-header",
+			text: "Mind-map"
+		});
+
+		const connectorsRow = layoutPopover.createDiv({ cls: "fractal-popover-row" });
+		connectorsRow.createSpan({ text: "Show connections:" });
+		const connectorsControls = connectorsRow.createDiv({ cls: "fractal-popover-controls" });
+		const connectorsCheckbox = connectorsControls.createEl("input", {
+			type: "checkbox",
+			cls: "fractal-popover-checkbox fractal-mindmap-connectors-checkbox",
+			attr: {
+				id: "fractal-mindmap-connectors"
+			}
+		});
+		connectorsCheckbox.checked = this.plugin.settings.showMindMapConnectors !== false;
+		connectorsControls.createEl("label", {
+			text: "Enable",
+			cls: "fractal-popover-checkbox-label",
+			attr: {
+				for: "fractal-mindmap-connectors"
+			}
+		});
+
+		connectorsCheckbox.addEventListener("change", () => {
+			this.plugin.settings.showMindMapConnectors = connectorsCheckbox.checked;
+			void this.plugin.saveSettings();
+			const leaves = this.plugin.app.workspace.getLeavesOfType(VIEW_TYPE_FRACTAL);
+			for (const leaf of leaves) {
+				if (leaf.view instanceof FractalView && leaf.view.currentVisualization === "mindmap") {
+					leaf.view.scheduleMindMapRelayout();
+				}
+			}
+		});
+
 		// Event listeners to toggle popovers
 		btnStyle.addEventListener("click", (evt) => {
 			evt.stopPropagation();
@@ -2144,7 +2268,7 @@ export class FractalView extends TextFileView {
 				layoutPopover.removeClass("is-open");
 			}
 		};
-		this.registerDomEvent(document, "click", closePopovers);
+		this.registerDomEvent(activeDocument, "click", closePopovers);
 
 		// --- ACTION BUTTONS (Undo/Redo, grouped in an edit-toolbar-group to match style) ---
 		const buttonsGroup = controls.createDiv({ cls: "fractal-edit-toolbar-group" });
@@ -2176,8 +2300,21 @@ export class FractalView extends TextFileView {
 
 	renderEditToolbar(parent: HTMLElement) {
 		parent.empty();
+
+		const mindMapBtn = this.contentEl.querySelector(".mindmap-toggle-btn");
+		if (mindMapBtn) {
+			mindMapBtn.toggleClass("active", this.currentVisualization === "mindmap");
+		}
+		const metaBtn = this.contentEl.querySelector(".meta-toggle-btn");
+		if (metaBtn) {
+			metaBtn.toggleClass("active", this.showMetadataPanel);
+		}
+		const connectorsCb = this.contentEl.querySelector<HTMLInputElement>(".fractal-mindmap-connectors-checkbox");
+		if (connectorsCb) {
+			connectorsCb.checked = this.plugin.settings.showMindMapConnectors !== false;
+		}
 		
-		const activeId = this.activeKeysByLevel[this.selectedLevel];
+		const activeId = this.selectedLevel === 0 ? "root" : this.activeKeysByLevel[this.selectedLevel];
 		const activeCard = activeId && activeId !== "root" ? this.findCardById(this.root, activeId) : null;
 		
 		if (this.editingCardId !== null) {
@@ -2296,10 +2433,7 @@ export class FractalView extends TextFileView {
 			setIcon(btnEdit, "pencil");
 			btnEdit.addEventListener("click", (e) => {
 				e.stopPropagation();
-				this.editingCardId = activeCard.id;
-				this.originalCardTitle = activeCard.title;
-				this.originalCardContent = activeCard.content;
-				void this.renderFractal();
+				this.startEditingCard(activeCard);
 			});
 			
 			// Add Child Button
@@ -2373,6 +2507,39 @@ export class FractalView extends TextFileView {
 				e.stopPropagation();
 				this.moveCardInList(activeCard, 'down');
 			});
+		} else if (this.currentVisualization === "mindmap" && this.selectedLevel === 0) {
+			if (this.editingRootContent || this.editingYaml) {
+				const infoGroup = parent.createDiv({ cls: "fractal-edit-toolbar-group info" });
+				infoGroup.createSpan({
+					cls: "fractal-toolbar-info-text",
+					text: "Editing root note (Esc to return)"
+				});
+			} else {
+				const rootOpsGroup = parent.createDiv({ cls: "fractal-edit-toolbar-group card-ops" });
+
+				const btnEditIntro = rootOpsGroup.createEl("button", {
+					cls: "fractal-toolbar-btn",
+					title: "Edit note introduction"
+				});
+				setIcon(btnEditIntro, "pencil");
+				btnEditIntro.addEventListener("click", (e) => {
+					e.stopPropagation();
+					this.mindMapExpandedNodeId = "root";
+					this.editingYaml = false;
+					this.editingRootContent = true;
+					void this.renderFractal();
+				});
+
+				const btnAddTopHeading = rootOpsGroup.createEl("button", {
+					cls: "fractal-toolbar-btn",
+					title: "Add H1 section"
+				});
+				setIcon(btnAddTopHeading, "corner-down-right");
+				btnAddTopHeading.addEventListener("click", (e) => {
+					e.stopPropagation();
+					this.insertCard(this.root, this.root.children.length, 1);
+				});
+			}
 		} else {
 			// No card is selected
 			const infoGroup = parent.createDiv({ cls: "fractal-edit-toolbar-group info" });
@@ -2818,6 +2985,10 @@ export class FractalView extends TextFileView {
 				widthSlider.value = this.plugin.settings.columnWidth.toString();
 			}
 		}
+
+		if (this.currentVisualization === "mindmap") {
+			this.scheduleMindMapRelayout();
+		}
 	}
 
 	applyThemeStyles() {
@@ -3012,7 +3183,7 @@ export class FractalView extends TextFileView {
 					introContentEl.createEl("p", { text: this.root.content });
 				}
 			} else {
-				introContentEl.createEl("em", { text: "No introductory text. Double click here or press 'Edit' to add it." });
+				introContentEl.createEl("em", { text: "No introductory text. Double click here or press edit to add it." });
 			}
 
 			editIntroBtn.addEventListener("click", (e) => {
@@ -3377,6 +3548,240 @@ export class FractalView extends TextFileView {
 		return inlineView;
 	}
 
+	private handleRenderedBodyClick(e: MouseEvent, cardEl: HTMLElement, isExpanded: boolean): boolean {
+		const target = e.target as HTMLElement;
+		const linkEl = target.closest<HTMLElement>("a.internal-link");
+		if (linkEl) {
+			e.stopPropagation();
+			e.preventDefault();
+			const dest = linkEl.getAttribute("data-href") || linkEl.getAttribute("href") || "";
+			if (dest) {
+				void this.app.workspace.openLinkText(dest, this.file?.path || "", e.ctrlKey || e.metaKey);
+			}
+			return true;
+		}
+		if (target.closest("a.external-link")) {
+			return true;
+		}
+		const imgTarget = target.closest("img, .internal-embed.image-embed, .internal-embed.media-embed");
+		if (imgTarget && isExpanded) {
+			const imgEl = (imgTarget.tagName === "IMG" ? imgTarget : imgTarget.querySelector("img")) as HTMLImageElement | null;
+			const hasImageToolkit = Boolean((this.app as AppWithPlugins).plugins?.enabledPlugins?.has("obsidian-image-toolkit"));
+			if (imgEl && !hasImageToolkit) {
+				e.stopPropagation();
+				new ImagePreviewModal(this.app, imgEl.src, imgEl.alt || "").open();
+			}
+			return true;
+		}
+		return false;
+	}
+
+	private mountInlineCardEditor(cardEl: HTMLElement, card: FractalCard, deferFocus = false) {
+		const titleInput = cardEl.createEl("input", {
+			type: "text",
+			cls: "fractal-card-edit-title"
+		});
+		titleInput.value = card.title;
+
+		const editorContainer = cardEl.createDiv({
+			cls: "lineage-inline-editor"
+		});
+
+		const stopProp = (e: Event) => e.stopPropagation();
+		titleInput.addEventListener("click", stopProp);
+		titleInput.addEventListener("mousedown", stopProp);
+		titleInput.addEventListener("dblclick", stopProp);
+		editorContainer.addEventListener("click", stopProp);
+		editorContainer.addEventListener("mousedown", stopProp);
+		editorContainer.addEventListener("dblclick", stopProp);
+
+		try {
+			this.createInlineMarkdownEditor(editorContainer, card.content || "");
+			editorContainer.addEventListener("keydown", (e) => {
+				if (e.key === "Escape") {
+					e.preventDefault();
+					e.stopPropagation();
+					this.triggerAutoSaveAndExit(card, titleInput, editorContainer);
+				}
+			}, true);
+		} catch (error) {
+			console.warn("Fractal: Inline MarkdownView unavailable, using plain textarea fallback:", error);
+			const editorEl = editorContainer.createEl("textarea", {
+				cls: "fractal-card-edit-body fractal-card-edit-body-raw"
+			});
+			editorEl.value = card.content || "";
+			editorEl.addEventListener("keydown", (e) => {
+				if (e.key === "Escape") {
+					e.preventDefault();
+					e.stopPropagation();
+					this.triggerAutoSaveAndExit(card, titleInput, editorContainer);
+				}
+			});
+		}
+
+		const focusTitle = () => {
+			titleInput.focus({ preventScroll: deferFocus });
+			if (card.title === "New card") {
+				titleInput.select();
+			}
+		};
+		if (deferFocus) {
+			window.setTimeout(focusTitle, 30);
+		} else {
+			window.requestAnimationFrame(focusTitle);
+		}
+
+		titleInput.addEventListener("keydown", (e) => {
+			if (e.key === "Escape") {
+				e.preventDefault();
+				e.stopPropagation();
+				this.triggerAutoSaveAndExit(card, titleInput, editorContainer);
+				return;
+			}
+			if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+				e.preventDefault();
+				if (this.activeEditorInstance && this.activeEditorInstance.editor) {
+					this.activeEditorInstance.editor.focus();
+					const lastLine = this.activeEditorInstance.editor.lastLine();
+					const ch = this.activeEditorInstance.editor.getLine(lastLine).length;
+					this.activeEditorInstance.editor.setCursor({ line: lastLine, ch });
+				} else {
+					const rawEditor = editorContainer.querySelector(".fractal-card-edit-body-raw") as HTMLElement;
+					if (rawEditor) rawEditor.focus();
+				}
+				return;
+			}
+			e.stopPropagation();
+		});
+
+		const actionsContainer = cardEl.createDiv({ cls: "fractal-card-edit-actions" });
+		const viewNoteBtn = actionsContainer.createEl("button", {
+			cls: "fractal-btn view-note-btn",
+			title: "View note in Obsidian"
+		});
+		setIcon(viewNoteBtn, "external-link");
+		viewNoteBtn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			e.preventDefault();
+			this.triggerAutoSaveAndExit(card, titleInput, editorContainer);
+			void this.plugin.toggleFractalView();
+		});
+
+		const handleBlur = () => {
+			if (this.editBlurTimeout) {
+				window.clearTimeout(this.editBlurTimeout);
+			}
+			this.editBlurTimeout = window.setTimeout(() => {
+				const activeEl = activeDocument.activeElement;
+				if (activeEl && (cardEl.contains(activeEl) || activeEl.closest(".fractal-header-toolbar"))) {
+					return;
+				}
+				if (this.editingCardId !== card.id) return;
+				this.triggerAutoSaveAndExit(card, titleInput, editorContainer);
+			}, 150);
+		};
+
+		titleInput.addEventListener("blur", handleBlur);
+		editorContainer.addEventListener("blur", handleBlur, true);
+	}
+
+	private openCardContextMenu(e: MouseEvent, card: FractalCard, level: number, cardEl: HTMLElement) {
+		e.stopPropagation();
+		e.preventDefault();
+
+		const menu = new Menu();
+
+		menu.addItem((item) =>
+			item.setTitle("Edit card 📝")
+				.onClick(() => {
+					this.startEditingCard(card);
+				})
+		);
+
+		const isNodeColl = this.file ? (this.plugin.settings.collapsedNodes[this.file.path]?.[card.id] || false) : false;
+		if (card.children.length > 0) {
+			menu.addItem((item) =>
+				item.setTitle(isNodeColl ? "Show branch 👁" : "Hide branch 🙈")
+					.onClick(() => this.toggleCardCollapsed(card))
+			);
+		}
+
+		menu.addItem((item) =>
+			item.setTitle("Add card above")
+				.onClick(() => {
+					const info = this.findParent(this.root, card.id);
+					if (info) this.insertCard(info.parent, info.index, level);
+				})
+		);
+
+		menu.addItem((item) =>
+			item.setTitle("Add card below")
+				.onClick(() => {
+					const info = this.findParent(this.root, card.id);
+					if (info) this.insertCard(info.parent, info.index + 1, level);
+				})
+		);
+
+		if (level < 6) {
+			menu.addItem((item) =>
+				item.setTitle("Add sub-card (child)")
+					.onClick(() => {
+						this.insertCard(card, card.children.length, level + 1);
+					})
+			);
+		}
+
+		menu.addSeparator();
+
+		menu.addItem((item) => {
+			item.setTitle("Set color");
+			const itemWithSubmenu = item as MenuItemWithSubmenu;
+			const submenu = itemWithSubmenu.setSubmenu ? itemWithSubmenu.setSubmenu() : new Menu();
+
+			submenu.addItem((sub) => sub.setTitle("Clear color").onClick(() => this.setCardColor(card.id, "")));
+			submenu.addItem((sub) => sub.setTitle("Teal 🟢").onClick(() => this.setCardColor(card.id, "fractal-color-teal")));
+			submenu.addItem((sub) => sub.setTitle("Blue 🔵").onClick(() => this.setCardColor(card.id, "fractal-color-blue")));
+			submenu.addItem((sub) => sub.setTitle("Yellow 🟡").onClick(() => this.setCardColor(card.id, "fractal-color-yellow")));
+			submenu.addItem((sub) => sub.setTitle("Orange 🟠").onClick(() => this.setCardColor(card.id, "fractal-color-orange")));
+			submenu.addItem((sub) => sub.setTitle("Crimson 🔴").onClick(() => this.setCardColor(card.id, "fractal-color-crimson")));
+			submenu.addItem((sub) => sub.setTitle("Purple 🟣").onClick(() => this.setCardColor(card.id, "fractal-color-purple")));
+			submenu.addItem((sub) => sub.setTitle("Magenta 🌺").onClick(() => this.setCardColor(card.id, "fractal-color-magenta")));
+			submenu.addItem((sub) => sub.setTitle("Grey ⚪").onClick(() => this.setCardColor(card.id, "fractal-color-grey")));
+
+			if (!itemWithSubmenu.setSubmenu) {
+				item.onClick((evt) => {
+					if ("clientX" in evt) {
+						submenu.showAtMouseEvent(evt);
+					} else {
+						const rect = cardEl.getBoundingClientRect();
+						submenu.showAtMouseEvent(new MouseEvent("contextmenu", {
+							clientX: rect.left + rect.width / 2,
+							clientY: rect.top + rect.height / 2
+						}));
+					}
+				});
+			}
+		});
+
+		menu.addSeparator();
+
+		menu.addItem((item) =>
+			item.setTitle("Delete card 🗑")
+				.setWarning(true)
+				.onClick(() => {
+					new ConfirmModal(this.app, {
+						title: "Delete card",
+						message: `Are you sure you want to delete "${card.title}" and all its descendants?`,
+						confirmText: "Delete",
+						isWarning: true,
+						onConfirm: () => this.deleteCard(card)
+					}).open();
+				})
+		);
+
+		menu.showAtMouseEvent(e);
+	}
+
 	// Render Generic Card
 	async renderCard(parent: HTMLElement, card: FractalCard, level: number, isActive: boolean) {
 		const colorClass = this.file ? (this.plugin.settings.cardColors[this.file.path]?.[card.id] || "") : "";
@@ -3396,118 +3801,7 @@ export class FractalView extends TextFileView {
 		const cardEl = parent.createDiv({ cls, attr: { "data-id": card.id } });
 
 		if (this.editingCardId === card.id) {
-			// Edit mode
-			const titleInput = cardEl.createEl("input", {
-				type: "text",
-				cls: "fractal-card-edit-title"
-			});
-			titleInput.value = card.title;
-
-			const editorContainer = cardEl.createDiv({
-				cls: "lineage-inline-editor"
-			});
-
-			// Prevent bubbling of clicks/mouse events to cardEl
-			const stopProp = (e: Event) => e.stopPropagation();
-			titleInput.addEventListener("click", stopProp);
-			titleInput.addEventListener("mousedown", stopProp);
-			titleInput.addEventListener("dblclick", stopProp);
-			editorContainer.addEventListener("click", stopProp);
-			editorContainer.addEventListener("mousedown", stopProp);
-			editorContainer.addEventListener("dblclick", stopProp);
-
-			try {
-				this.createInlineMarkdownEditor(editorContainer, card.content || "");
-				
-				window.requestAnimationFrame(() => {
-					titleInput.focus();
-					if (card.title === "New card") {
-						titleInput.select();
-					}
-				});
-				
-				editorContainer.addEventListener("keydown", (e) => {
-					if (e.key === "Escape") {
-						e.preventDefault();
-						e.stopPropagation();
-						this.triggerAutoSaveAndExit(card, titleInput, editorContainer);
-						return;
-					}
-				}, true);
-				
-			} catch (error) {
-				console.warn("Fractal: Inline MarkdownView unavailable, using plain textarea fallback:", error);
-				const editorEl = editorContainer.createEl("textarea", {
-					cls: "fractal-card-edit-body fractal-card-edit-body-raw"
-				});
-				editorEl.value = card.content || "";
-				editorEl.addEventListener("keydown", (e) => {
-					if (e.key === "Escape") {
-						e.preventDefault();
-						this.triggerAutoSaveAndExit(card, titleInput, editorContainer);
-					}
-				});
-			}
-			
-			// Always default to focusing the title first
-			window.requestAnimationFrame(() => {
-				titleInput.focus();
-				if (card.title === "New card") {
-					titleInput.select();
-				}
-			});
-
-			titleInput.addEventListener("keydown", (e) => {
-				if (e.key === "Escape") {
-					e.preventDefault();
-					this.triggerAutoSaveAndExit(card, titleInput, editorContainer);
-					return;
-				}
-				if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-					e.preventDefault();
-					if (this.activeEditorInstance && this.activeEditorInstance.editor) {
-						this.activeEditorInstance.editor.focus();
-						const lastLine = this.activeEditorInstance.editor.lastLine();
-						const ch = this.activeEditorInstance.editor.getLine(lastLine).length;
-						this.activeEditorInstance.editor.setCursor({ line: lastLine, ch });
-					} else {
-						const rawEditor = editorContainer.querySelector(".fractal-card-edit-body-raw") as HTMLElement;
-						if (rawEditor) rawEditor.focus();
-					}
-					return;
-				}
-				e.stopPropagation();
-			});
-
-			// Minimal View Note Icon Button
-			const actionsContainer = cardEl.createDiv({ cls: "fractal-card-edit-actions" });
-			const viewNoteBtn = actionsContainer.createEl("button", {
-				cls: "fractal-btn view-note-btn",
-				title: "View note in Obsidian"
-			});
-			setIcon(viewNoteBtn, "external-link");
-			viewNoteBtn.addEventListener("click", (e) => {
-				e.stopPropagation();
-				e.preventDefault();
-				this.triggerAutoSaveAndExit(card, titleInput, editorContainer);
-				void this.plugin.toggleFractalView();
-			});
-
-			const handleBlur = (evt: FocusEvent) => {
-				if (this.editBlurTimeout) {
-					window.clearTimeout(this.editBlurTimeout);
-				}
-				this.editBlurTimeout = window.setTimeout(() => {
-					const activeEl = document.activeElement;
-					if (!activeEl || !cardEl.contains(activeEl)) {
-						if (this.editingCardId !== card.id) return;
-						this.triggerAutoSaveAndExit(card, titleInput, editorContainer);
-					}
-				}, 150);
-			};
-
-			titleInput.addEventListener("blur", handleBlur);
-			editorContainer.addEventListener("blur", handleBlur, true);
+			this.mountInlineCardEditor(cardEl, card, false);
 		} else {
 			// Display mode
 			cardEl.createDiv({ cls: "fractal-card-title", text: card.title });
@@ -3656,32 +3950,8 @@ export class FractalView extends TextFileView {
 
 			// Click Selection Handler
 			cardEl.addEventListener("click", (e) => {
-				const target = e.target as HTMLElement;
-				const linkEl = target.closest("a.internal-link") as HTMLElement;
-				if (linkEl) {
-					e.stopPropagation();
-					e.preventDefault();
-					const dest = linkEl.getAttribute("data-href") || linkEl.getAttribute("href") || "";
-					if (dest) {
-						void this.app.workspace.openLinkText(dest, this.file?.path || "", e.ctrlKey || e.metaKey);
-					}
+				if (this.handleRenderedBodyClick(e, cardEl, cardEl.hasClass("was-expanded"))) {
 					return;
-				}
-				
-				if (target.closest("a.external-link")) {
-					return;
-				}
-
-				const imgTarget = target.closest("img, .internal-embed.image-embed, .internal-embed.media-embed");
-				if (imgTarget) {
-					if (cardEl.hasClass("was-expanded")) {
-						const imgEl = (imgTarget.tagName === "IMG" ? imgTarget : imgTarget.querySelector("img")) as HTMLImageElement | null;
-						const hasImageToolkit = Boolean((this.app as AppWithPlugins).plugins?.enabledPlugins?.has("obsidian-image-toolkit"));
-						if (imgEl && !hasImageToolkit) {
-							new ImagePreviewModal(this.app, imgEl.src, imgEl.alt || "").open();
-						}
-						return;
-					}
 				}
 
 				e.stopPropagation();
@@ -3724,101 +3994,7 @@ export class FractalView extends TextFileView {
 
 			// Right-click context menu handler
 			cardEl.addEventListener("contextmenu", (e) => {
-				e.stopPropagation();
-				e.preventDefault();
-
-				const menu = new Menu();
-				
-				menu.addItem((item) => 
-					item.setTitle("Edit card 📝")
-						.onClick(() => {
-							this.startEditingCard(card);
-						})
-				);
-
-				const isNodeColl = this.file ? (this.plugin.settings.collapsedNodes[this.file.path]?.[card.id] || false) : false;
-				if (card.children.length > 0) {
-					menu.addItem((item) => 
-						item.setTitle(isNodeColl ? "Show branch 👁" : "Hide branch 🙈")
-							.onClick(() => this.toggleCardCollapsed(card))
-					);
-				}
-
-				menu.addItem((item) => 
-					item.setTitle("Add card above")
-						.onClick(() => {
-							const info = this.findParent(this.root, card.id);
-							if (info) this.insertCard(info.parent, info.index, level);
-						})
-				);
-
-				menu.addItem((item) => 
-					item.setTitle("Add card below")
-						.onClick(() => {
-							const info = this.findParent(this.root, card.id);
-							if (info) this.insertCard(info.parent, info.index + 1, level);
-						})
-				);
-
-				if (level < 6) {
-					menu.addItem((item) => 
-						item.setTitle("Add sub-card (child)")
-							.onClick(() => {
-								this.insertCard(card, card.children.length, level + 1);
-							})
-					);
-				}
-
-				menu.addSeparator();
-
-				// Color Picker Submenu
-				menu.addItem((item) => {
-					item.setTitle("Set color");
-					const itemWithSubmenu = item as MenuItemWithSubmenu;
-					const submenu = itemWithSubmenu.setSubmenu ? itemWithSubmenu.setSubmenu() : new Menu();
-					
-					submenu.addItem((sub) => sub.setTitle("Clear color").onClick(() => this.setCardColor(card.id, "")));
-					submenu.addItem((sub) => sub.setTitle("Teal 🟢").onClick(() => this.setCardColor(card.id, "fractal-color-teal")));
-					submenu.addItem((sub) => sub.setTitle("Blue 🔵").onClick(() => this.setCardColor(card.id, "fractal-color-blue")));
-					submenu.addItem((sub) => sub.setTitle("Yellow 🟡").onClick(() => this.setCardColor(card.id, "fractal-color-yellow")));
-					submenu.addItem((sub) => sub.setTitle("Orange 🟠").onClick(() => this.setCardColor(card.id, "fractal-color-orange")));
-					submenu.addItem((sub) => sub.setTitle("Crimson 🔴").onClick(() => this.setCardColor(card.id, "fractal-color-crimson")));
-					submenu.addItem((sub) => sub.setTitle("Purple 🟣").onClick(() => this.setCardColor(card.id, "fractal-color-purple")));
-					submenu.addItem((sub) => sub.setTitle("Magenta 🌺").onClick(() => this.setCardColor(card.id, "fractal-color-magenta")));
-					submenu.addItem((sub) => sub.setTitle("Grey ⚪").onClick(() => this.setCardColor(card.id, "fractal-color-grey")));
-					
-					if (!itemWithSubmenu.setSubmenu) {
-						item.onClick((evt) => {
-							if ("clientX" in evt) {
-								submenu.showAtMouseEvent(evt);
-							} else {
-								const rect = cardEl.getBoundingClientRect();
-								submenu.showAtMouseEvent(new MouseEvent("contextmenu", {
-									clientX: rect.left + rect.width / 2,
-									clientY: rect.top + rect.height / 2
-								}));
-							}
-						});
-					}
-				});
-
-				menu.addSeparator();
-
-				menu.addItem((item) => 
-					item.setTitle("Delete card 🗑")
-						.setWarning(true)
-						.onClick(() => {
-							new ConfirmModal(this.app, {
-								title: "Delete card",
-								message: `Are you sure you want to delete "${card.title}" and all its descendants?`,
-								confirmText: "Delete",
-								isWarning: true,
-								onConfirm: () => this.deleteCard(card)
-							}).open();
-						})
-				);
-
-				menu.showAtMouseEvent(e);
+				this.openCardContextMenu(e, card, level, cardEl);
 			});
 		}
 	}
@@ -3943,6 +4119,9 @@ export class FractalView extends TextFileView {
 		this.editingCardId = card.id;
 		this.originalCardTitle = card.title;
 		this.originalCardContent = card.content;
+		if (this.currentVisualization === "mindmap") {
+			this.mindMapExpandedNodeId = card.id;
+		}
 		void this.renderFractal();
 	}
 
@@ -4093,6 +4272,9 @@ export class FractalView extends TextFileView {
 
 		this.editingCardId = newCard.id;
 		this.selectedLevel = level;
+		if (this.currentVisualization === "mindmap") {
+			this.mindMapExpandedNodeId = newCard.id;
+		}
 
 		this.requestSave();
 		void this.renderFractal();
@@ -4100,6 +4282,9 @@ export class FractalView extends TextFileView {
 
 	deleteCard(card: FractalCard) {
 		this.saveActiveEdit();
+		if (this.mindMapExpandedNodeId === card.id) {
+			this.mindMapExpandedNodeId = null;
+		}
 		const info = this.findParent(this.root, card.id);
 		if (info) {
 			this.pushHistory();
@@ -4211,6 +4396,11 @@ export class FractalView extends TextFileView {
 			e.preventDefault();
 			e.stopPropagation();
 			this.redo();
+			return;
+		}
+
+		if (this.currentVisualization === "mindmap") {
+			this.handleMindMapKeyDown(e);
 			return;
 		}
 
@@ -4388,12 +4578,896 @@ export class FractalView extends TextFileView {
 		void this.renderFractal();
 
 		window.setTimeout(() => {
-			const activeEl = this.contentEl.querySelector(".fractal-card.active") as HTMLElement;
+			const activeEl = this.contentEl.querySelector(".fractal-card.active, .fractal-mindmap-node.active") as HTMLElement;
 			const viewContainer = this.contentEl.querySelector(".fractal-view-container") as HTMLElement;
 			if (activeEl && viewContainer) {
 				this.centerActiveCard(activeEl, viewContainer);
 			}
 		}, 100);
+	}
+
+	private mindMapTreeRoot: {
+		id: string;
+		level: number;
+		card: FractalCard;
+		children: Array<NonNullable<FractalView["mindMapTreeRoot"]>>;
+		el: HTMLElement;
+		w: number;
+		h: number;
+		subtreeH: number;
+		x: number;
+		y: number;
+		illuminated: boolean;
+		active: boolean;
+	} | null = null;
+
+	scheduleMindMapRelayout() {
+		if (this.currentVisualization !== "mindmap") return;
+		if (this.mindMapLayoutRaf !== null) {
+			window.cancelAnimationFrame(this.mindMapLayoutRaf);
+		}
+		this.mindMapLayoutRaf = window.requestAnimationFrame(() => {
+			this.mindMapLayoutRaf = null;
+			const container = this.contentEl.querySelector<HTMLElement>(".fractal-view-container");
+			const stage = container?.querySelector<HTMLElement>(".fractal-mindmap-stage");
+			if (container && stage && this.mindMapTreeRoot) {
+				this.layoutMindMapStage(stage, this.mindMapTreeRoot, container);
+			}
+		});
+	}
+
+	private isMindMapBranchCollapsed(cardId: string): boolean {
+		if (!this.file || cardId === "root") return false;
+		return Boolean(this.plugin.settings.collapsedNodes[this.file.path]?.[cardId]);
+	}
+
+	private getMindMapIlluminatedIds(): { activeId: string; illuminatedIds: Set<string> } {
+		const activeId =
+			this.selectedLevel === 0
+				? "root"
+				: (this.activeKeysByLevel[this.selectedLevel] || (this.root.children[0]?.id ?? "root"));
+		const illuminatedIds = new Set<string>(["root"]);
+		if (activeId !== "root") {
+			const walkPath = (node: FractalCard, targetId: string, acc: string[]): boolean => {
+				acc.push(node.id);
+				if (node.id === targetId) return true;
+				for (const child of node.children) {
+					if (walkPath(child, targetId, acc)) return true;
+				}
+				acc.pop();
+				return false;
+			};
+			const pathIds: string[] = [];
+			if (walkPath(this.root, activeId, pathIds)) {
+				pathIds.forEach(id => illuminatedIds.add(id));
+			}
+		}
+		return { activeId, illuminatedIds };
+	}
+
+	private selectMindMapNode(card: FractalCard, level: number, keepExpandedId: string | null = null) {
+		this.saveActiveEdit();
+		this.editingYaml = false;
+		this.editingRootContent = false;
+		this.mindMapExpandedNodeId = keepExpandedId;
+
+		if (level === 0 || card.id === "root") {
+			this.selectedLevel = 0;
+			this.activeKeysByLevel[0] = "root";
+			void this.renderFractal();
+			window.setTimeout(() => {
+				const activeEl = this.contentEl.querySelector<HTMLElement>(".fractal-mindmap-node.active");
+				const viewContainer = this.contentEl.querySelector<HTMLElement>(".fractal-view-container");
+				if (activeEl && viewContainer) {
+					this.centerActiveCard(activeEl, viewContainer);
+				}
+			}, 60);
+			return;
+		}
+
+		this.selectCard(card, level);
+	}
+
+	private collectVisibleMindMapNodesAtLevel(
+		current: FractalCard,
+		currentLevel: number,
+		targetLevel: number,
+		acc: { card: FractalCard; level: number }[]
+	) {
+		if (currentLevel === targetLevel) {
+			acc.push({ card: current, level: currentLevel });
+			return;
+		}
+		if (currentLevel > targetLevel || this.isMindMapBranchCollapsed(current.id)) return;
+		for (const child of current.children) {
+			this.collectVisibleMindMapNodesAtLevel(child, currentLevel + 1, targetLevel, acc);
+		}
+	}
+
+	private handleMindMapKeyDown(e: KeyboardEvent) {
+		const isModifierKey = e.ctrlKey || e.metaKey || e.altKey;
+
+		// Double-Escape step 2: collapse expanded reading node back to compact mind-map
+		if (e.key === "Escape" && !isModifierKey) {
+			if (this.mindMapExpandedNodeId !== null) {
+				e.preventDefault();
+				e.stopPropagation();
+				this.mindMapExpandedNodeId = null;
+				void this.renderFractal();
+			}
+			return;
+		}
+
+		const activeId = this.selectedLevel === 0 ? "root" : (this.activeKeysByLevel[this.selectedLevel] || "root");
+		const selectedCard = activeId === "root" ? this.root : this.findCardById(this.root, activeId);
+		if (!selectedCard) {
+			this.selectMindMapNode(this.root, 0);
+			return;
+		}
+		const level = selectedCard.id === "root" ? 0 : this.getCardDepth(selectedCard.id);
+
+		// Enter step 1: expand body text; Enter step 2: enter editing mode
+		if (e.key === "Enter" && !isModifierKey) {
+			e.preventDefault();
+			e.stopPropagation();
+			if (selectedCard.id === "root") {
+				if (this.mindMapExpandedNodeId !== "root") {
+					this.mindMapExpandedNodeId = "root";
+					void this.renderFractal();
+				} else {
+					this.editingYaml = false;
+					this.editingRootContent = true;
+					void this.renderFractal();
+				}
+				return;
+			}
+			if (this.mindMapExpandedNodeId !== selectedCard.id) {
+				this.mindMapExpandedNodeId = selectedCard.id;
+				void this.renderFractal();
+			} else {
+				this.startEditingCard(selectedCard);
+			}
+			return;
+		}
+
+		// Copy / Cut / Paste / New card shortcuts for heading nodes
+		if (selectedCard.id !== "root") {
+			const pInfo = this.findParent(this.root, selectedCard.id);
+			const currentParent = pInfo ? pInfo.parent : this.root;
+			const currentIdx = pInfo ? pInfo.index : 0;
+
+			if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+				e.preventDefault();
+				e.stopPropagation();
+				this.plugin.copiedCard = cloneCard(selectedCard);
+				new Notice(`Card "${selectedCard.title}" copied`);
+				return;
+			}
+			if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "x") {
+				e.preventDefault();
+				e.stopPropagation();
+				this.plugin.copiedCard = cloneCard(selectedCard);
+				new Notice(`Card "${selectedCard.title}" cut`);
+				this.deleteCard(selectedCard);
+				return;
+			}
+			if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
+				e.preventDefault();
+				e.stopPropagation();
+				const copied = this.plugin.copiedCard;
+				if (!copied) {
+					new Notice("No card in clipboard to paste");
+					return;
+				}
+				this.pushHistory();
+				const pastedCard = cloneCard(copied);
+				if (e.shiftKey) {
+					selectedCard.children.push(pastedCard);
+					this.adjustHeadingLevel(pastedCard, Math.min(Math.max(selectedCard.headingLevel + 1, 1), 6));
+					assignStableKeys(this.root);
+					const pastedLevel = this.getCardDepth(selectedCard.id) + 1;
+					this.activeKeysByLevel[pastedLevel] = pastedCard.id;
+					for (let i = pastedLevel + 1; i <= 6; i++) delete this.activeKeysByLevel[i];
+					this.selectedLevel = pastedLevel;
+				} else {
+					currentParent.children.splice(currentIdx + 1, 0, pastedCard);
+					this.adjustHeadingLevel(pastedCard, Math.min(Math.max(currentParent.headingLevel + 1, 1), 6));
+					assignStableKeys(this.root);
+					const pastedLevel = this.getCardDepth(selectedCard.id);
+					this.activeKeysByLevel[pastedLevel] = pastedCard.id;
+					for (let i = pastedLevel + 1; i <= 6; i++) delete this.activeKeysByLevel[i];
+					this.selectedLevel = pastedLevel;
+				}
+				this.mindMapExpandedNodeId = null;
+				this.requestSave();
+				void this.renderFractal();
+				return;
+			}
+			if ((e.ctrlKey || e.altKey) && (e.code === "KeyN" || e.key.toLowerCase() === "n")) {
+				e.preventDefault();
+				if (e.shiftKey) {
+					if (level < 6) this.insertCard(selectedCard, selectedCard.children.length, level + 1);
+				} else {
+					this.insertCard(currentParent, currentIdx + 1, level);
+				}
+				return;
+			}
+		} else if ((e.ctrlKey || e.altKey) && (e.code === "KeyN" || e.key.toLowerCase() === "n")) {
+			e.preventDefault();
+			this.insertCard(this.root, this.root.children.length, 1);
+			return;
+		}
+
+		// Arrow Navigation ONLY (never auto-creates cards in Mind-Map mode)
+		if (e.key === "ArrowLeft") {
+			e.preventDefault();
+			if (level > 1) {
+				const pInfo = this.findParent(this.root, selectedCard.id);
+				if (pInfo) {
+					this.selectMindMapNode(pInfo.parent, level - 1, null);
+				}
+			} else if (level === 1) {
+				this.selectMindMapNode(this.root, 0, null);
+			}
+		} else if (e.key === "ArrowRight") {
+			e.preventDefault();
+			if (selectedCard.children.length > 0 && !this.isMindMapBranchCollapsed(selectedCard.id)) {
+				const preferredChildId = this.lastSelectedChildByParent[selectedCard.id] || this.activeKeysByLevel[level + 1];
+				const targetChild = selectedCard.children.find(c => c.id === preferredChildId) || selectedCard.children[0];
+				this.selectMindMapNode(targetChild, level + 1, null);
+			}
+		} else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+			e.preventDefault();
+			if (level === 0) return;
+			const nodesAtLevel: { card: FractalCard; level: number }[] = [];
+			this.collectVisibleMindMapNodesAtLevel(this.root, 0, level, nodesAtLevel);
+			const idx = nodesAtLevel.findIndex(item => item.card.id === selectedCard.id);
+			if (idx === -1) return;
+			const nextIdx = e.key === "ArrowUp" ? idx - 1 : idx + 1;
+			if (nextIdx >= 0 && nextIdx < nodesAtLevel.length) {
+				const targetItem = nodesAtLevel[nextIdx];
+				this.selectMindMapNode(targetItem.card, targetItem.level, null);
+			}
+		}
+	}
+
+	private buildMindMapChildBranchPath(
+		startX: number,
+		forkX: number,
+		py: number,
+		spineX: number,
+		cx: number,
+		cy: number,
+		maxRadius: number
+	): string {
+		const dy = cy - py;
+		if (Math.abs(dy) < 1.5) {
+			return `M ${startX} ${py} L ${cx} ${cy}`;
+		}
+		const signY = dy > 0 ? 1 : -1;
+		const r = Math.max(0, Math.min(maxRadius, spineX - forkX, Math.abs(dy) / 2, cx - spineX));
+		if (r < 1) {
+			return `M ${startX} ${py} L ${spineX} ${py} L ${spineX} ${cy} L ${cx} ${cy}`;
+		}
+		const turnStartX = spineX - r;
+		const parts = [`M ${startX} ${py}`];
+		if (turnStartX > startX) {
+			parts.push(`L ${turnStartX} ${py}`);
+		}
+		parts.push(
+			`Q ${spineX} ${py} ${spineX} ${py + signY * r}`,
+			`L ${spineX} ${cy - signY * r}`,
+			`Q ${spineX} ${cy} ${spineX + r} ${cy}`,
+			`L ${cx} ${cy}`
+		);
+		return parts.join(" ");
+	}
+
+	private layoutMindMapStage(
+		stage: HTMLElement,
+		rootItem: NonNullable<FractalView["mindMapTreeRoot"]>,
+		container: HTMLElement
+	) {
+		const zoom = this.plugin.settings.zoom || 1.0;
+		const horizontalGap = Math.round(56 * zoom);
+		const verticalGap = Math.round(14 * zoom);
+		const padX = Math.round(48 * zoom);
+		const padY = Math.round(40 * zoom);
+		const cornerRadius = Math.round(10 * zoom);
+
+		const measurePass = (node: NonNullable<FractalView["mindMapTreeRoot"]>) => {
+			node.w = node.el.offsetWidth || Math.round(140 * zoom);
+			node.h = node.el.offsetHeight || Math.round(36 * zoom);
+			if (node.children.length === 0) {
+				node.subtreeH = node.h;
+				return;
+			}
+			let childrenTotal = 0;
+			for (let i = 0; i < node.children.length; i++) {
+				measurePass(node.children[i]);
+				childrenTotal += node.children[i].subtreeH;
+				if (i > 0) childrenTotal += verticalGap;
+			}
+			node.subtreeH = Math.max(node.h, childrenTotal);
+		};
+
+		let maxRight = 0;
+		let maxBottom = 0;
+
+		const positionPass = (node: NonNullable<FractalView["mindMapTreeRoot"]>, x: number, bandTop: number) => {
+			node.x = x;
+			node.y = bandTop + (node.subtreeH - node.h) / 2;
+			maxRight = Math.max(maxRight, node.x + node.w);
+			maxBottom = Math.max(maxBottom, node.y + node.h);
+
+			if (node.children.length === 0) return;
+
+			let childrenTotal = 0;
+			for (let i = 0; i < node.children.length; i++) {
+				childrenTotal += node.children[i].subtreeH;
+				if (i > 0) childrenTotal += verticalGap;
+			}
+			let cursorY = bandTop + (node.subtreeH - childrenTotal) / 2;
+			const childX = x + node.w + horizontalGap;
+			for (const child of node.children) {
+				positionPass(child, childX, cursorY);
+				cursorY += child.subtreeH + verticalGap;
+			}
+		};
+
+		measurePass(rootItem);
+		const viewportHeight = container.clientHeight || 600;
+		const contentH = rootItem.subtreeH;
+		const startY = Math.max(padY, Math.round((viewportHeight - contentH) / 2));
+		positionPass(rootItem, padX, startY);
+
+		const stageWidth = Math.max(container.clientWidth || 600, Math.ceil(maxRight + padX));
+		const stageHeight = Math.max(viewportHeight, Math.ceil(maxBottom + padY));
+
+		stage.style.width = `${stageWidth}px`;
+		stage.style.height = `${stageHeight}px`;
+
+		const applyDomPositions = (node: NonNullable<FractalView["mindMapTreeRoot"]>) => {
+			node.el.style.left = `${Math.round(node.x)}px`;
+			node.el.style.top = `${Math.round(node.y)}px`;
+			for (const child of node.children) {
+				applyDomPositions(child);
+			}
+		};
+		applyDomPositions(rootItem);
+
+		const svg = stage.querySelector<SVGSVGElement>(".fractal-mindmap-svg");
+		if (!svg) return;
+		while (svg.firstChild) {
+			svg.removeChild(svg.firstChild);
+		}
+		svg.setAttribute("width", stageWidth.toString());
+		svg.setAttribute("height", stageHeight.toString());
+		svg.setAttribute("viewBox", `0 0 ${stageWidth} ${stageHeight}`);
+
+		if (this.plugin.settings.showMindMapConnectors === false) return;
+
+		const svgNs = "http://www.w3.org/2000/svg";
+		const normalPaths: string[] = [];
+		const illuminatedPaths: string[] = [];
+		const stemOffset = Math.round(horizontalGap * 0.36);
+
+		const collectEdges = (node: NonNullable<FractalView["mindMapTreeRoot"]>) => {
+			if (node.children.length === 0) return;
+
+			const px = Math.round(node.x + node.w);
+			const py = Math.round(node.y + node.h / 2);
+			const cxFirst = Math.round(node.children[0].x);
+			const forkX = px + Math.min(stemOffset, Math.max(4, Math.floor((cxFirst - px) / 2) - cornerRadius));
+			const spineX = Math.min(cxFirst - 2, forkX + cornerRadius);
+			const hasIlluminatedChild = node.children.some(child => node.illuminated && child.illuminated);
+
+			// Emit a single shared trunk exiting parent up to forkX when none of the child branches is illuminated
+			if (!hasIlluminatedChild) {
+				normalPaths.push(`M ${px} ${py} L ${forkX} ${py}`);
+			}
+
+			for (const child of node.children) {
+				const cx = Math.round(child.x);
+				const cy = Math.round(child.y + child.h / 2);
+				const isEdgeIlluminated = node.illuminated && child.illuminated;
+				if (isEdgeIlluminated) {
+					illuminatedPaths.push(this.buildMindMapChildBranchPath(px, forkX, py, spineX, cx, cy, cornerRadius));
+				} else {
+					normalPaths.push(this.buildMindMapChildBranchPath(forkX, forkX, py, spineX, cx, cy, cornerRadius));
+				}
+				collectEdges(child);
+			}
+		};
+		collectEdges(rootItem);
+
+		// Render normal connectors first and illuminated branch connectors on top so the active stem & aura remain unbroken
+		for (const d of normalPaths) {
+			const pathEl = activeDocument.createElementNS(svgNs, "path");
+			pathEl.setAttribute("class", "fractal-mindmap-connector");
+			pathEl.setAttribute("d", d);
+			svg.appendChild(pathEl);
+		}
+		for (const d of illuminatedPaths) {
+			const pathEl = activeDocument.createElementNS(svgNs, "path");
+			pathEl.setAttribute("class", "fractal-mindmap-connector is-illuminated");
+			pathEl.setAttribute("d", d);
+			svg.appendChild(pathEl);
+		}
+	}
+
+	private async renderMindMapRootNode(
+		nodeEl: HTMLElement,
+		isExpanded: boolean,
+		gen: number
+	) {
+		const isEditingRoot = isExpanded && (this.editingRootContent || this.editingYaml);
+		if (isEditingRoot) nodeEl.addClass("is-editing");
+		if (isExpanded) nodeEl.addClass("is-expanded");
+
+		const noteTitle = this.file ? this.file.basename : "Untitled";
+		const hasRootHiddenText =
+			(this.frontmatter && this.frontmatter.trim().length > 0) ||
+			(this.root.content && this.root.content.trim().length > 0);
+
+		const headerEl = nodeEl.createDiv({ cls: "fractal-mindmap-node-header" });
+		headerEl.createDiv({ cls: "fractal-card-title", text: noteTitle });
+
+		if (!isExpanded) {
+			if (hasRootHiddenText) {
+				const contentBtn = headerEl.createEl("button", {
+					cls: "fractal-mindmap-has-content-btn",
+					title: "View properties and introduction (Enter)"
+				});
+				setIcon(contentBtn, "file-text");
+				contentBtn.addEventListener("click", (e) => {
+					e.stopPropagation();
+					this.saveActiveEdit();
+					this.selectedLevel = 0;
+					this.activeKeysByLevel[0] = "root";
+					this.mindMapExpandedNodeId = "root";
+					void this.renderFractal();
+				});
+			}
+			nodeEl.addEventListener("click", (e) => {
+				e.stopPropagation();
+				if (this.cardClickTimeout) {
+					window.clearTimeout(this.cardClickTimeout);
+					this.cardClickTimeout = null;
+				}
+				const isAlreadySelected = this.selectedLevel === 0;
+				this.cardClickTimeout = window.setTimeout(() => {
+					this.cardClickTimeout = null;
+					this.saveActiveEdit();
+					this.selectedLevel = 0;
+					this.activeKeysByLevel[0] = "root";
+					this.mindMapExpandedNodeId = isAlreadySelected ? "root" : null;
+					void this.renderFractal();
+				}, 200);
+			});
+			nodeEl.addEventListener("dblclick", (e) => {
+				e.stopPropagation();
+				if (this.cardClickTimeout) {
+					window.clearTimeout(this.cardClickTimeout);
+					this.cardClickTimeout = null;
+				}
+				this.saveActiveEdit();
+				this.selectedLevel = 0;
+				this.activeKeysByLevel[0] = "root";
+				this.mindMapExpandedNodeId = "root";
+				this.editingYaml = false;
+				this.editingRootContent = true;
+				void this.renderFractal();
+			});
+			return;
+		}
+
+		// Expanded State (Reading or Editing Intro/YAML)
+		const actionsEl = headerEl.createDiv({ cls: "fractal-mindmap-node-actions" });
+		if (!this.editingRootContent && !this.editingYaml) {
+			const editBtn = actionsEl.createEl("button", {
+				cls: "fractal-mindmap-action-btn",
+				title: "Edit introduction (Enter)"
+			});
+			setIcon(editBtn, "pencil");
+			editBtn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.editingYaml = false;
+				this.editingRootContent = true;
+				void this.renderFractal();
+			});
+		}
+		const collapseBtn = actionsEl.createEl("button", {
+			cls: "fractal-mindmap-action-btn",
+			title: "Collapse (Esc)"
+		});
+		setIcon(collapseBtn, "minimize-2");
+		collapseBtn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			this.cleanupActiveEditor();
+			this.editingYaml = false;
+			this.editingRootContent = false;
+			this.mindMapExpandedNodeId = null;
+			void this.renderFractal();
+		});
+
+		const sectionsWrap = nodeEl.createDiv({ cls: "fractal-mindmap-root-sections" });
+		const yamlWrap = sectionsWrap.createDiv({ cls: "fractal-mindmap-root-yaml" });
+		if (this.editingYaml) {
+			this.renderYamlEditor(yamlWrap);
+		} else {
+			this.renderYamlViewer(yamlWrap);
+		}
+
+		const introWrap = sectionsWrap.createDiv({ cls: "fractal-mindmap-root-intro" });
+		const introHeader = introWrap.createDiv({ cls: "fractal-yaml-header" });
+		introHeader.createSpan({ text: "Introduction", cls: "fractal-yaml-header-title" });
+
+		if (this.editingRootContent) {
+			const saveIntroBtn = introHeader.createEl("button", {
+				cls: "fractal-yaml-edit-btn",
+				title: "Save and exit (Esc)"
+			});
+			setIcon(saveIntroBtn, "check");
+
+			const editorContainer = introWrap.createDiv({ cls: "lineage-inline-editor" });
+			const stopProp = (e: Event) => e.stopPropagation();
+			editorContainer.addEventListener("click", stopProp);
+			editorContainer.addEventListener("mousedown", stopProp);
+			editorContainer.addEventListener("dblclick", stopProp);
+
+			const saveAndExitIntro = (val: string) => {
+				this.cleanupActiveEditor();
+				if (this.root.content !== val) {
+					this.pushHistory();
+					this.root.content = val;
+					this.requestSave();
+				}
+				this.editingRootContent = false;
+				this.mindMapExpandedNodeId = "root";
+				void this.renderFractal();
+			};
+
+			try {
+				const inlineView = this.createInlineMarkdownEditor(editorContainer, this.root.content || "");
+				editorContainer.addEventListener("keydown", (e) => {
+					if (e.key === "Escape") {
+						e.preventDefault();
+						e.stopPropagation();
+						let val = this.root.content || "";
+						if (inlineView.__fractalReady) {
+							try {
+								val = inlineView.getViewData();
+							} catch {
+								val = this.root.content || "";
+							}
+						}
+						saveAndExitIntro(val);
+					}
+				}, true);
+				saveIntroBtn.addEventListener("click", (e) => {
+					e.stopPropagation();
+					let val = this.root.content || "";
+					if (inlineView.__fractalReady) {
+						try {
+							val = inlineView.getViewData();
+						} catch {
+							val = this.root.content || "";
+						}
+					}
+					saveAndExitIntro(val);
+				});
+				window.setTimeout(() => {
+					inlineView.editor?.focus();
+				}, 30);
+			} catch {
+				const textarea = editorContainer.createEl("textarea", {
+					cls: "fractal-card-edit-body fractal-card-edit-body-raw"
+				});
+				textarea.value = this.root.content || "";
+				textarea.addEventListener("keydown", (e) => {
+					if (e.key === "Escape") {
+						e.preventDefault();
+						e.stopPropagation();
+						saveAndExitIntro(textarea.value);
+					}
+				});
+				saveIntroBtn.addEventListener("click", (e) => {
+					e.stopPropagation();
+					saveAndExitIntro(textarea.value);
+				});
+				window.setTimeout(() => textarea.focus({ preventScroll: true }), 30);
+			}
+		} else {
+			const introEditBtn = introHeader.createEl("button", {
+				cls: "fractal-yaml-edit-btn",
+				title: "Edit introduction"
+			});
+			setIcon(introEditBtn, "pencil");
+			introEditBtn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.editingYaml = false;
+				this.editingRootContent = true;
+				void this.renderFractal();
+			});
+
+			const bodyEl = introWrap.createDiv({ cls: "fractal-mindmap-root-intro-body markdown-preview-view markdown-rendered" });
+			if (this.root.content && this.file) {
+				const rootComp = this.createCardComponent(nodeEl);
+				await MarkdownRenderer.render(this.app, this.root.content, bodyEl, this.file.path, rootComp);
+				if (gen !== this.renderGeneration) return;
+				postProcessRenderedMarkdown(bodyEl, this.app, this.file.path);
+				bodyEl.addEventListener("click", (e) => {
+					this.handleRenderedBodyClick(e, nodeEl, true);
+				});
+			} else {
+				bodyEl.createEl("em", {
+					cls: "fractal-mindmap-empty-hint",
+					text: "No introductory text — press Enter or double-click to add."
+				});
+			}
+			bodyEl.addEventListener("dblclick", (e) => {
+				e.stopPropagation();
+				this.editingYaml = false;
+				this.editingRootContent = true;
+				void this.renderFractal();
+			});
+		}
+	}
+
+	private async renderMindMapHeadingNode(
+		nodeEl: HTMLElement,
+		card: FractalCard,
+		level: number,
+		isExpanded: boolean,
+		isEditing: boolean,
+		gen: number
+	) {
+		if (isEditing) {
+			nodeEl.addClass("is-editing");
+			this.mountInlineCardEditor(nodeEl, card, true);
+			return;
+		}
+
+		if (isExpanded) {
+			nodeEl.addClass("is-expanded");
+			const headerEl = nodeEl.createDiv({ cls: "fractal-mindmap-node-header" });
+			headerEl.createDiv({ cls: "fractal-card-title", text: card.title });
+
+			const actionsEl = headerEl.createDiv({ cls: "fractal-mindmap-node-actions" });
+			const editBtn = actionsEl.createEl("button", {
+				cls: "fractal-mindmap-action-btn",
+				title: "Edit card (Enter)"
+			});
+			setIcon(editBtn, "pencil");
+			editBtn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.startEditingCard(card);
+			});
+
+			const collapseBtn = actionsEl.createEl("button", {
+				cls: "fractal-mindmap-action-btn",
+				title: "Collapse (Esc)"
+			});
+			setIcon(collapseBtn, "minimize-2");
+			collapseBtn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.mindMapExpandedNodeId = null;
+				void this.renderFractal();
+			});
+
+			const bodyEl = nodeEl.createDiv({ cls: "fractal-card-body markdown-preview-view markdown-rendered" });
+			if (card.content && card.content.trim().length > 0) {
+				if (this.file) {
+					const cardComp = this.createCardComponent(nodeEl);
+					await MarkdownRenderer.render(this.app, card.content, bodyEl, this.file.path, cardComp);
+					if (gen !== this.renderGeneration) return;
+					postProcessRenderedMarkdown(bodyEl, this.app, this.file.path);
+				} else {
+					bodyEl.createEl("p", { text: card.content });
+				}
+			} else {
+				bodyEl.createEl("em", {
+					cls: "fractal-mindmap-empty-hint",
+					text: "Empty section — press Enter or double-click to edit."
+				});
+			}
+			nodeEl.addClass("was-expanded");
+
+			nodeEl.addEventListener("click", (e) => {
+				if (this.handleRenderedBodyClick(e, nodeEl, true)) return;
+				e.stopPropagation();
+			});
+			nodeEl.addEventListener("dblclick", (e) => {
+				const target = e.target as HTMLElement;
+				if (target.closest("a.internal-link, a.external-link, img, .internal-embed.image-embed, .internal-embed.media-embed, video, audio")) {
+					return;
+				}
+				e.stopPropagation();
+				window.getSelection()?.removeAllRanges();
+				this.startEditingCard(card);
+			}, true);
+			nodeEl.addEventListener("contextmenu", (e) => {
+				this.openCardContextMenu(e, card, level, nodeEl);
+			});
+			return;
+		}
+
+		// Compact State (hidden text)
+		const headerEl = nodeEl.createDiv({ cls: "fractal-mindmap-node-header" });
+		headerEl.createDiv({ cls: "fractal-card-title", text: card.title });
+
+		const hasHiddenText = Boolean(card.content && card.content.trim().length > 0);
+		if (hasHiddenText) {
+			const contentBtn = headerEl.createEl("button", {
+				cls: "fractal-mindmap-has-content-btn",
+				title: "View section content (Enter)"
+			});
+			setIcon(contentBtn, "file-text");
+			contentBtn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				if (this.cardClickTimeout) {
+					window.clearTimeout(this.cardClickTimeout);
+					this.cardClickTimeout = null;
+				}
+				this.selectMindMapNode(card, level, card.id);
+			});
+		}
+
+		const isBranchCollapsed = this.isMindMapBranchCollapsed(card.id);
+		if (isBranchCollapsed && card.children.length > 0) {
+			const badge = headerEl.createSpan({
+				cls: "fractal-mindmap-collapsed-badge",
+				title: "Branch hidden (click to show)"
+			});
+			const badgeIcon = badge.createSpan({ cls: "fractal-indicator-icon" });
+			setIcon(badgeIcon, "git-branch");
+			badge.createSpan({ text: ` ${card.children.length}` });
+			badge.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.toggleCardCollapsed(card);
+			});
+		}
+
+		nodeEl.addEventListener("click", (e) => {
+			e.stopPropagation();
+			if (this.cardClickTimeout) {
+				window.clearTimeout(this.cardClickTimeout);
+				this.cardClickTimeout = null;
+			}
+			const isAlreadyActive = this.selectedLevel === level && this.activeKeysByLevel[level] === card.id;
+			this.cardClickTimeout = window.setTimeout(() => {
+				this.cardClickTimeout = null;
+				if (this.editingCardId && this.editingCardId !== card.id) {
+					this.saveActiveEdit();
+				}
+				if (isAlreadyActive) {
+					this.mindMapExpandedNodeId = card.id;
+					void this.renderFractal();
+				} else {
+					this.selectMindMapNode(card, level, null);
+				}
+			}, 200);
+		});
+
+		nodeEl.addEventListener("dblclick", (e) => {
+			e.stopPropagation();
+			if (this.cardClickTimeout) {
+				window.clearTimeout(this.cardClickTimeout);
+				this.cardClickTimeout = null;
+			}
+			window.getSelection()?.removeAllRanges();
+			if (this.editingCardId && this.editingCardId !== card.id) {
+				this.saveActiveEdit();
+			}
+			this.updateActivePathToCard(card);
+			this.startEditingCard(card);
+		}, true);
+
+		nodeEl.addEventListener("contextmenu", (e) => {
+			this.openCardContextMenu(e, card, level, nodeEl);
+		});
+	}
+
+	async refreshMindMap(container: HTMLElement, oldScrollLeft: number, oldScrollTop: number, gen: number) {
+		this.cleanupMindMapObserver();
+
+		let stage = container.querySelector<HTMLElement>(".fractal-mindmap-stage");
+		if (stage) {
+			this.unloadComponentsInContainer(stage);
+			stage.empty();
+		} else {
+			stage = container.createDiv({ cls: "fractal-mindmap-stage" });
+		}
+		const activeStage = stage;
+
+		const svgNs = "http://www.w3.org/2000/svg";
+		const svg = activeDocument.createElementNS(svgNs, "svg");
+		svg.setAttribute("class", "fractal-mindmap-svg");
+		activeStage.appendChild(svg);
+
+		const { activeId, illuminatedIds } = this.getMindMapIlluminatedIds();
+		const renderPromises: Promise<void>[] = [];
+
+		const buildNode = (card: FractalCard, level: number): NonNullable<FractalView["mindMapTreeRoot"]> => {
+			const isRoot = level === 0;
+			const isActive = activeId === card.id;
+			const isIlluminated = illuminatedIds.has(card.id);
+			const isEditing = !isRoot && this.editingCardId === card.id;
+			const isExpanded = this.mindMapExpandedNodeId === card.id || isEditing;
+			const colorClass = !isRoot && this.file ? (this.plugin.settings.cardColors[this.file.path]?.[card.id] || "") : "";
+
+			let cls = isRoot ? "fractal-mindmap-node is-root" : "fractal-mindmap-node fractal-card";
+			if (isActive) cls += " active";
+			else if (isIlluminated) cls += " illuminated";
+			if (colorClass) cls += ` ${colorClass}`;
+
+			const nodeEl = activeStage.createDiv({
+				cls,
+				attr: {
+					"data-id": card.id,
+					"data-level": level.toString()
+				}
+			});
+
+			if (isRoot) {
+				renderPromises.push(this.renderMindMapRootNode(nodeEl, isExpanded, gen));
+			} else {
+				renderPromises.push(this.renderMindMapHeadingNode(nodeEl, card, level, isExpanded, isEditing, gen));
+			}
+
+			const item: NonNullable<FractalView["mindMapTreeRoot"]> = {
+				id: card.id,
+				level,
+				card,
+				children: [],
+				el: nodeEl,
+				w: 0,
+				h: 0,
+				subtreeH: 0,
+				x: 0,
+				y: 0,
+				illuminated: isIlluminated,
+				active: isActive
+			};
+
+			if (!this.isMindMapBranchCollapsed(card.id)) {
+				for (const child of card.children) {
+					item.children.push(buildNode(child, level + 1));
+				}
+			}
+			return item;
+		};
+
+		const treeRoot = buildNode(this.root, 0);
+		this.mindMapTreeRoot = treeRoot;
+
+		await Promise.all(renderPromises);
+		if (gen !== this.renderGeneration) return;
+
+		this.layoutMindMapStage(stage, treeRoot, container);
+
+		const resizeObserver = new ResizeObserver(() => {
+			this.scheduleMindMapRelayout();
+		});
+		const observedEls = stage.querySelectorAll(".fractal-mindmap-node.is-expanded, .fractal-mindmap-node.is-editing");
+		observedEls.forEach(el => resizeObserver.observe(el));
+		this.mindMapObserver = resizeObserver;
+
+		container.scrollLeft = oldScrollLeft;
+		container.scrollTop = oldScrollTop;
+
+		window.requestAnimationFrame(() => {
+			if (gen !== this.renderGeneration) return;
+			this.layoutMindMapStage(activeStage, treeRoot, container);
+			const activeEl = activeStage.querySelector<HTMLElement>(".fractal-mindmap-node.active");
+			if (activeEl) {
+				this.centerActiveCard(activeEl, container);
+			}
+			if (!this.editingCardId && !this.editingRootContent && !this.editingYaml) {
+				container.focus();
+			}
+		});
 	}
 
 	centerActiveCard(activeEl: HTMLElement, container: HTMLElement) {
@@ -4531,6 +5605,21 @@ export default class FractalPlugin extends Plugin {
 			callback: () => void this.toggleFractalView()
 		});
 
+		this.addCommand({
+			id: "toggle-mindmap-view",
+			name: "Toggle Mind-map view",
+			checkCallback: (checking) => {
+				const leaf = this.app.workspace.getMostRecentLeaf();
+				if (leaf && leaf.view instanceof FractalView) {
+					if (!checking) {
+						leaf.view.toggleVisualizationMode();
+					}
+					return true;
+				}
+				return false;
+			}
+		});
+
 		// Re-render open Fractal views once vault metadata cache resolves embeds/links
 		this.registerEvent(
 			this.app.metadataCache.on("resolved", () => {
@@ -4555,6 +5644,12 @@ export default class FractalPlugin extends Plugin {
 		const loadedData = (loadedRaw && typeof loadedRaw === "object" ? loadedRaw : {}) as Partial<FractalSettings>;
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData);
 		this.settings.viewMode = "ginkgo";
+		if (this.settings.defaultVisualization !== "mindmap") {
+			this.settings.defaultVisualization = "default";
+		}
+		if (this.settings.showMindMapConnectors === undefined) {
+			this.settings.showMindMapConnectors = true;
+		}
 		if ((this.settings.themeMode as string) === "steel-blue" || (this.settings.themeMode as string) === "classic") {
 			this.settings.themeMode = "obsidian-theme";
 		}
@@ -4718,6 +5813,44 @@ class FractalSettingTab extends PluginSettingTab {
 										leaf.view.applyCenteredLayout();
 									}
 								}
+							})
+					);
+				}
+			},
+			{
+				name: "Default visualization",
+				desc: "Choose whether notes open in the column tree (Default) or Mind-map layout.",
+				render: (setting) => {
+					setting.addDropdown((dropdown) =>
+						dropdown
+							.addOption("default", "Default")
+							.addOption("mindmap", "Mind-map")
+							.setValue(this.plugin.settings.defaultVisualization || "default")
+							.onChange(async (value) => {
+								const nextMode = value === "mindmap" ? "mindmap" : "default";
+								this.plugin.settings.defaultVisualization = nextMode;
+								await this.plugin.saveSettings();
+								const leaves = this.plugin.app.workspace.getLeavesOfType(VIEW_TYPE_FRACTAL);
+								for (const leaf of leaves) {
+									if (leaf.view instanceof FractalView) {
+										leaf.view.toggleVisualizationMode(nextMode);
+									}
+								}
+							})
+					);
+				}
+			},
+			{
+				name: "Mind-map: Show connections",
+				desc: "Display orthogonal connectors between nodes in Mind-map mode.",
+				render: (setting) => {
+					setting.addToggle((toggle) =>
+						toggle
+							.setValue(this.plugin.settings.showMindMapConnectors !== false)
+							.onChange(async (value) => {
+								this.plugin.settings.showMindMapConnectors = value;
+								await this.plugin.saveSettings();
+								this.refreshOpenViews();
 							})
 					);
 				}
