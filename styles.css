@@ -438,8 +438,8 @@
 }
 
 .workspace-leaf-content[data-type="fractal-view"] .fractal-card-body {
-	font-family: var(--font-text);
-	font-size: 0.9em;
+	font-family: var(--font-text, var(--font-interface));
+	font-size: calc(var(--fractal-view-text-size, var(--fractal-text-size, 14px)) * 0.9 * var(--zoom-factor));
 	line-height: 1.4;
 	word-break: break-word;
 	flex-grow: 1;
@@ -462,7 +462,7 @@
 	background: transparent;
 	border: none;
 	box-shadow: none;
-	font-family: var(--font-text);
+	font-family: var(--font-text, var(--font-interface));
 	font-size: 1em;
 }
 
@@ -928,12 +928,23 @@
 }
 
 .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card,
-.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card *:not(a):not(.callout-title):not(.callout-title *):not(.callout-icon) {
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card *:not(a):not(.callout-title):not(.callout-title *):not(.callout-icon):not(.fractal-card-title):not(.fractal-card-title *) {
 	color: var(--fractal-custom-text-color, #eef1f6);
 }
 
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card.active,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card.active *:not(a):not(.callout-title):not(.callout-title *):not(.callout-icon):not(.fractal-card-title):not(.fractal-card-title *),
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card.illuminated,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card.illuminated *:not(a):not(.callout-title):not(.callout-title *):not(.callout-icon):not(.fractal-card-title):not(.fractal-card-title *) {
+	color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
+}
+
 .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .fractal-card-title,
-.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .fractal-card-title * {
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .fractal-card-title *,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card.active .fractal-card-title,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card.active .fractal-card-title *,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card.illuminated .fractal-card-title,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card.illuminated .fractal-card-title * {
 	background-color: transparent;
 	border-bottom: none;
 	color: var(--fractal-custom-title-color, #ebf8ff);
@@ -956,13 +967,6 @@
 	--text-normal: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
 	--text-muted: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #4a5568));
 	--callout-text-color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
-}
-
-.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card.active,
-.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card.active *:not(a):not(.callout-title):not(.callout-title *):not(.callout-icon),
-.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card.illuminated,
-.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card.illuminated *:not(a):not(.callout-title):not(.callout-title *):not(.callout-icon) {
-	color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
 }
 
 /* Custom theme variables scoped to preview engines and callout containers to prevent themes from leaking light text */
@@ -1220,28 +1224,35 @@
 .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-view-container .fractal-columns-container .fractal-column .fractal-card.active .fractal-card-edit-title.fractal-card-edit-title,
 .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-view-container .fractal-columns-container .fractal-column .fractal-card.active .fractal-card-edit-body.fractal-card-edit-body,
 .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-view-container .fractal-columns-container .fractal-column .fractal-card.illuminated .fractal-card-edit-title.fractal-card-edit-title,
-.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-view-container .fractal-columns-container .fractal-column .fractal-card.illuminated .fractal-card-edit-body.fractal-card-edit-body {
-	color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-view-container .fractal-columns-container .fractal-column .fractal-card.illuminated .fractal-card-edit-body.fractal-card-edit-body,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-stage .fractal-mindmap-node .fractal-card-edit-title {
+	color: var(--fractal-custom-title-color, var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c)));
 	background-color: var(--fractal-custom-active-bg, #ffffff);
 	border-color: var(--fractal-custom-aura-color, #63b3ed);
 }
 
-.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content .fractal-view-container .fractal-columns-container .fractal-column .fractal-card .fractal-card-edit-actions .view-note-btn.view-note-btn {
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content .fractal-card .fractal-card-edit-actions .view-note-btn.view-note-btn {
 	background: transparent;
 	border: none;
+	box-shadow: none;
 	padding: 4px;
 	cursor: pointer;
 	color: var(--text-muted);
-	opacity: 0.6;
+	opacity: 0.7;
 	transition: opacity 0.2s ease, color 0.2s ease;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 }
 
-.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content .fractal-view-container .fractal-columns-container .fractal-column .fractal-card .fractal-card-edit-actions .view-note-btn.view-note-btn:hover {
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content .fractal-card .fractal-card-edit-actions .view-note-btn.view-note-btn:hover {
 	opacity: 1;
+	background: transparent;
 	color: var(--interactive-accent);
+}
+
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .fractal-card-edit-actions .view-note-btn.view-note-btn {
+	color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
 }
 
 /* Toolbar Popover Menu */
@@ -1877,6 +1888,39 @@ body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view
 	color: #9e9e9e;
 }
 
+/* Custom Theme Callout blend-mode reset & inner text visibility override (beats Obsidian theme-dark/light mix-blend-mode: lighten/darken and inherit rules cleanly) */
+body.theme-dark .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .callout,
+body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .callout,
+body.theme-dark .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .fractal-card-body .callout,
+body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .fractal-card-body .callout,
+body.theme-dark .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-node .callout,
+body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-node .callout,
+body.theme-dark .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-root-content-body .callout,
+body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-root-content-body .callout {
+	--callout-blend-mode: normal;
+	mix-blend-mode: normal;
+	color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
+}
+
+body.theme-dark .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .callout-content,
+body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .callout-content,
+body.theme-dark .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .fractal-card-body .callout-content,
+body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .fractal-card-body .callout-content,
+body.theme-dark .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .callout-content *:not(a):not(code):not(mark),
+body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .callout-content *:not(a):not(code):not(mark),
+body.theme-dark .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .fractal-card-body .callout-content *:not(a):not(code):not(mark),
+body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .fractal-card-body .callout-content *:not(a):not(code):not(mark),
+body.theme-dark .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-node .callout-content,
+body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-node .callout-content,
+body.theme-dark .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-node .callout-content *:not(a):not(code):not(mark),
+body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-node .callout-content *:not(a):not(code):not(mark),
+body.theme-dark .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-root-content-body .callout-content,
+body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-root-content-body .callout-content,
+body.theme-dark .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-root-content-body .callout-content *:not(a):not(code):not(mark),
+body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-root-content-body .callout-content *:not(a):not(code):not(mark) {
+	color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
+}
+
 /* ====== LISTS ====== */
 .workspace-leaf-content[data-type="fractal-view"] .fractal-card-body ul,
 .workspace-leaf-content[data-type="fractal-view"] .fractal-card-body ol {
@@ -1948,11 +1992,10 @@ body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view
     --file-margins: 0px;
     --file-margins-top: 0px;
     --file-margins-bottom: 0px;
-    --font-text: var(--font-text-override, var(--font-text-theme, var(--font-default, var(--font-interface))));
-    font-family: var(--font-text);
+    font-family: var(--font-text, var(--font-interface));
 }
 .workspace-leaf-content[data-type="fractal-view"] .fractal-card .lineage-inline-editor {
-    --font-text-size: calc(var(--fractal-text-size, var(--font-normal-size, 14px)) * 0.9 * var(--zoom-factor));
+    --font-text-size: calc(var(--fractal-edit-text-size, var(--fractal-text-size, 14px)) * 0.9 * var(--zoom-factor));
     --editor-font-size: var(--font-text-size);
     --table-text-size: var(--font-text-size);
     font-size: var(--font-text-size);
@@ -1966,7 +2009,6 @@ body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view
     font-size: var(--font-text-size);
 }
 .workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor .markdown-source-view {
-    --font-text: var(--font-text-override, var(--font-text-theme, var(--font-default, var(--font-interface))));
     --table-text-size: var(--font-text-size);
 }
 .workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor .view-header,
@@ -2274,25 +2316,100 @@ body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view
 }
 
 /* Transparent background and consistent typography for inline CodeMirror editors */
+.workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor,
+.workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor .view-content,
 .workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor .markdown-source-view,
+.workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor .markdown-source-view.mod-cm6,
 .workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor .cm-editor,
-.workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor .cm-scroller {
+.workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor .cm-scroller,
+.workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor .cm-sizer,
+.workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor .cm-contentContainer,
+.workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor .cm-editor .cm-content {
     background-color: transparent;
+    background: transparent;
+}
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .lineage-inline-editor,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .lineage-inline-editor .view-content,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .lineage-inline-editor .markdown-source-view,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .lineage-inline-editor .cm-editor,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .lineage-inline-editor .cm-scroller,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .lineage-inline-editor .cm-sizer,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card .lineage-inline-editor .cm-contentContainer,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-node.is-root .lineage-inline-editor,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-node.is-root .lineage-inline-editor .view-content,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-node.is-root .lineage-inline-editor .markdown-source-view,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-node.is-root .lineage-inline-editor .cm-editor,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-node.is-root .lineage-inline-editor .cm-scroller,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-node.is-root .lineage-inline-editor .cm-sizer,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-node.is-root .lineage-inline-editor .cm-contentContainer,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .lineage-inline-editor .cm-editor .cm-content,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .lineage-inline-editor .cm-editor .cm-line:not(.HyperMD-codeblock) {
+    --background-primary: transparent;
+    --background-primary-alt: transparent;
+    --background-secondary: transparent;
+    --code-background: rgba(128, 128, 128, 0.18);
+    --code-normal: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
+    --active-line-bg: rgba(128, 128, 128, 0.08);
+    --text-normal: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
+    --text-muted: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #4a5568));
+    --caret-color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
+    background-color: transparent;
+    background: transparent;
+    color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
+}
+
+/* Readable code blocks and inline code inside Custom mode cards & Mind-Map nodes (reading & editing) */
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card pre,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-node pre,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .lineage-inline-editor .cm-editor .cm-line.HyperMD-codeblock {
+    --code-background: rgba(128, 128, 128, 0.18);
+    --code-normal: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
+    background-color: rgba(128, 128, 128, 0.18);
+    color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
+}
+
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card code,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-node code,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .lineage-inline-editor .cm-inline-code {
+    --code-background: rgba(128, 128, 128, 0.18);
+    --code-normal: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
+    background-color: rgba(128, 128, 128, 0.18);
+    color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
+}
+
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card pre code,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-node pre code {
+    background-color: transparent;
+}
+
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-card pre .copy-code-button,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-node pre .copy-code-button {
+    background-color: transparent;
+    color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
 }
 .workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor,
 .workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor .markdown-source-view,
 .workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor .cm-editor,
 .workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor .cm-editor .cm-content,
-.workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor .cm-scroller {
+.workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor .cm-scroller,
+.workspace-leaf-content[data-type="fractal-view"] .lineage-inline-editor .cm-editor .cm-line:not(.HyperMD-codeblock) {
     color: inherit;
-    font-family: var(--font-text);
+    font-family: var(--font-text, var(--font-interface));
 }
 .workspace-leaf-content[data-type="fractal-view"] .fractal-card .lineage-inline-editor .markdown-source-view,
 .workspace-leaf-content[data-type="fractal-view"] .fractal-card .lineage-inline-editor .cm-editor,
 .workspace-leaf-content[data-type="fractal-view"] .fractal-card .lineage-inline-editor .cm-editor .cm-content,
 .workspace-leaf-content[data-type="fractal-view"] .fractal-card .lineage-inline-editor .cm-scroller {
-    font-size: calc(var(--fractal-text-size, var(--font-normal-size, 14px)) * 0.9 * var(--zoom-factor));
+    font-size: calc(var(--fractal-edit-text-size, var(--fractal-text-size, 14px)) * 0.9 * var(--zoom-factor));
     line-height: 1.4;
+}
+.workspace-leaf-content[data-type="fractal-view"] .fractal-split-text-size-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.workspace-leaf-content[data-type="fractal-view"] .fractal-split-text-size-rows.is-hidden {
+    display: none;
 }
 
 /* Edit and formatting toolbar inside controls */
@@ -2729,21 +2846,42 @@ body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view
 	color: var(--fractal-custom-title-color, var(--fractal-custom-active-text, #1a202c));
 }
 
-.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-stage .fractal-mindmap-node.is-root {
-	background-color: var(--fractal-custom-aura-color, #3a86c8);
-	border-color: var(--fractal-custom-aura-color, #3a86c8);
-	color: #ffffff;
-}
-
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-stage .fractal-mindmap-node.is-root,
 .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-stage .fractal-mindmap-node.is-root.is-expanded,
 .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-stage .fractal-mindmap-node.is-root.is-editing {
 	background-color: var(--fractal-custom-active-bg, #ffffff);
+	border-color: var(--fractal-custom-aura-color, #3a86c8);
 	color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
+	--text-normal: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
+	--text-muted: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #4a5568));
 }
 
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-stage .fractal-mindmap-node.is-root.active {
+	box-shadow: 0 0 calc(14px * var(--zoom-factor)) var(--fractal-custom-aura-color, #3a86c8);
+}
+
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-stage .fractal-mindmap-node.is-root .fractal-card-title,
 .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-stage .fractal-mindmap-node.is-root.is-expanded .fractal-card-title,
 .workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-stage .fractal-mindmap-node.is-root.is-editing .fractal-card-title {
 	color: var(--fractal-custom-title-color, var(--fractal-custom-active-text, #1a202c));
+}
+
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-stage .fractal-mindmap-node.is-root .fractal-mindmap-has-content-btn,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-stage .fractal-mindmap-node.is-root .fractal-mindmap-action-btn,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-stage .fractal-mindmap-node.is-root .fractal-yaml-header-title,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-stage .fractal-mindmap-node.is-root .fractal-yaml-key-text,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-stage .fractal-mindmap-node.is-root .fractal-yaml-value-text,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-stage .fractal-mindmap-node.is-root .fractal-yaml-edit-btn {
+	color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
+}
+
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-stage .fractal-mindmap-node.is-root .fractal-yaml-table,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-stage .fractal-mindmap-node.is-root .fractal-yaml-key-container,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-stage .fractal-mindmap-node.is-root .fractal-yaml-value-container,
+.workspace-leaf-content[data-type="fractal-view"] .fractal-view-content[data-theme="custom"] .fractal-mindmap-stage .fractal-mindmap-node.is-root .fractal-mindmap-root-intro-body {
+	background-color: rgba(128, 128, 128, 0.12);
+	border-color: rgba(128, 128, 128, 0.25);
+	color: var(--fractal-custom-text-color, var(--fractal-custom-active-text, #1a202c));
 }
 
 /* Mind-Map subtle node indicators & actions */
@@ -2809,7 +2947,8 @@ body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view
 	border-radius: calc(6px * var(--zoom-factor));
 	background-color: var(--background-primary-alt);
 	border: 1px solid var(--background-modifier-border);
-	font-size: calc(var(--fractal-text-size, var(--font-normal-size, 14px)) * var(--zoom-factor));
+	font-family: var(--font-text, var(--font-interface));
+	font-size: calc(var(--fractal-view-text-size, var(--fractal-text-size, 14px)) * 0.9 * var(--zoom-factor));
 	cursor: text;
 }
 
@@ -2821,9 +2960,12 @@ body.theme-light .workspace-leaf-content[data-type="fractal-view"] .fractal-view
 }
 
 .workspace-leaf-content[data-type="fractal-view"] .fractal-mindmap-stage .fractal-mindmap-node.is-root .lineage-inline-editor {
-	--font-text-size: calc(var(--fractal-text-size, var(--font-normal-size, 14px)) * 0.9 * var(--zoom-factor));
-	font-size: calc(var(--fractal-text-size, var(--font-normal-size, 14px)) * 0.9 * var(--zoom-factor));
-	line-height: 1.5;
+	--font-text-size: calc(var(--fractal-edit-text-size, var(--fractal-text-size, 14px)) * 0.9 * var(--zoom-factor));
+	--editor-font-size: var(--font-text-size);
+	--table-text-size: var(--font-text-size);
+	font-family: var(--font-text, var(--font-interface));
+	font-size: var(--font-text-size);
+	line-height: 1.4;
 	width: 100%;
 	max-width: 100%;
 	box-sizing: border-box;

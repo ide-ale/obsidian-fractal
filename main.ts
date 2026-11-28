@@ -88,6 +88,9 @@ interface FractalSettings {
 	customTitleColor: string; // Custom theme title color
 	defaultVisualization: "default" | "mindmap"; // Default layout visualization
 	showMindMapConnectors: boolean; // Show orthogonal connectors in Mind-Map mode
+	syncEditTextSize: boolean; // Keep viewing and editing text sizes synchronized
+	viewFontSize: number; // Separate viewing text size in px when unsynced
+	editFontSize: number; // Separate editing text size in px when unsynced
 }
 
 const DEFAULT_SETTINGS: FractalSettings = {
@@ -117,7 +120,10 @@ const DEFAULT_SETTINGS: FractalSettings = {
 	openByDefault: false,
 	customTitleColor: "#ebf8ff",
 	defaultVisualization: "default",
-	showMindMapConnectors: true
+	showMindMapConnectors: true,
+	syncEditTextSize: true,
+	viewFontSize: 14,
+	editFontSize: 14
 };
 
 function getHeadingIdAtCursor(markdownView: MarkdownView, app: App): string | null {
@@ -1701,43 +1707,11 @@ export class FractalView extends TextFileView {
 
 		inactiveHeightInput.addEventListener("blur", commitInactiveHeight);
 
-		// Text Size Row
-		const textSizeRow = layoutPopover.createDiv({ cls: "fractal-popover-row" });
-		textSizeRow.createSpan({ text: "Text size:" });
-		const textSizeControls = textSizeRow.createDiv({ cls: "fractal-popover-controls" });
-		const textSizeSlider = textSizeControls.createEl("input", {
-			type: "range",
-			cls: "fractal-toolbar-slider",
-			attr: {
-				min: "10",
-				max: "24",
-				step: "1",
-				value: (this.plugin.settings.fontSize || 14).toString()
-			}
-		});
-		const textSizeInput = textSizeControls.createEl("input", {
-			type: "number",
-			cls: "fractal-toolbar-number-input text-size-input",
-			attr: {
-				min: "10",
-				max: "24",
-				step: "1",
-				value: (this.plugin.settings.fontSize || 14).toString()
-			}
-		});
-		textSizeControls.createSpan({ text: "px", cls: "fractal-popover-unit" });
-
-		const updateTextSize = (newSize: number) => {
-			newSize = Math.min(Math.max(newSize, 10), 24);
-			this.plugin.settings.fontSize = newSize;
-			void this.plugin.saveSettings();
-			textSizeSlider.value = newSize.toString();
-			textSizeInput.value = newSize.toString();
-
+		const applyZoomStylesToOpenViews = () => {
 			const leaves = this.plugin.app.workspace.getLeavesOfType(VIEW_TYPE_FRACTAL);
 			for (const leaf of leaves) {
 				if (leaf.view instanceof FractalView) {
-					const leafContainer = leaf.view.contentEl.querySelector(".fractal-view-container") as HTMLElement;
+					const leafContainer = leaf.view.contentEl.querySelector<HTMLElement>(".fractal-view-container");
 					if (leafContainer) {
 						leaf.view.updateZoomStyles(leafContainer);
 					}
@@ -1745,27 +1719,137 @@ export class FractalView extends TextFileView {
 			}
 		};
 
-		textSizeSlider.addEventListener("input", () => {
-			updateTextSize(parseInt(textSizeSlider.value));
-		});
+		const createFontSizeRow = (
+			parentEl: HTMLElement,
+			label: string,
+			inputCls: string,
+			getVal: () => number,
+			setVal: (v: number) => void
+		) => {
+			const row = parentEl.createDiv({ cls: "fractal-popover-row" });
+			row.createSpan({ text: label });
+			const rowControls = row.createDiv({ cls: "fractal-popover-controls" });
+			const slider = rowControls.createEl("input", {
+				type: "range",
+				cls: "fractal-toolbar-slider",
+				attr: {
+					min: "10",
+					max: "24",
+					step: "1",
+					value: getVal().toString()
+				}
+			});
+			const input = rowControls.createEl("input", {
+				type: "number",
+				cls: `fractal-toolbar-number-input ${inputCls}`,
+				attr: {
+					min: "10",
+					max: "24",
+					step: "1",
+					value: getVal().toString()
+				}
+			});
+			rowControls.createSpan({ text: "px", cls: "fractal-popover-unit" });
 
-		const commitTextSize = () => {
-			let val = parseInt(textSizeInput.value);
-			if (isNaN(val)) {
-				textSizeInput.value = (this.plugin.settings.fontSize || 14).toString();
-				return;
-			}
-			updateTextSize(val);
+			const applySize = (nextSize: number) => {
+				const clamped = Math.min(Math.max(nextSize, 10), 24);
+				setVal(clamped);
+				void this.plugin.saveSettings();
+				slider.value = clamped.toString();
+				input.value = clamped.toString();
+				applyZoomStylesToOpenViews();
+			};
+
+			slider.addEventListener("input", () => {
+				applySize(parseInt(slider.value));
+			});
+			input.addEventListener("keydown", (e) => {
+				if (e.key === "Enter") {
+					e.preventDefault();
+					input.blur();
+				}
+			});
+			input.addEventListener("blur", () => {
+				const val = parseInt(input.value);
+				if (isNaN(val)) {
+					input.value = getVal().toString();
+					return;
+				}
+				applySize(val);
+			});
+
+			return { row, slider, input };
 		};
 
-		textSizeInput.addEventListener("keydown", (e) => {
-			if (e.key === "Enter") {
-				e.preventDefault();
-				textSizeInput.blur();
+		// Text Size Row
+		const textSizeCtl = createFontSizeRow(
+			layoutPopover,
+			"Text size:",
+			"text-size-input",
+			() => this.plugin.settings.fontSize || 14,
+			(v) => { this.plugin.settings.fontSize = v; }
+		);
+
+		// Sync view & edit text size toggle row
+		const syncTextRow = layoutPopover.createDiv({ cls: "fractal-popover-row" });
+		syncTextRow.createSpan({ text: "Sync edit size:" });
+		const syncTextControls = syncTextRow.createDiv({ cls: "fractal-popover-controls" });
+		const syncTextCheckbox = syncTextControls.createEl("input", {
+			type: "checkbox",
+			cls: "fractal-popover-checkbox",
+			attr: {
+				id: "fractal-sync-text-size"
+			}
+		});
+		syncTextControls.createEl("label", {
+			text: "Sync",
+			cls: "fractal-popover-checkbox-label",
+			attr: {
+				for: "fractal-sync-text-size"
 			}
 		});
 
-		textSizeInput.addEventListener("blur", commitTextSize);
+		const splitTextRowsWrap = layoutPopover.createDiv({ cls: "fractal-split-text-size-rows" });
+		const viewSizeCtl = createFontSizeRow(
+			splitTextRowsWrap,
+			"View text size:",
+			"view-text-size-input",
+			() => this.plugin.settings.viewFontSize || this.plugin.settings.fontSize || 14,
+			(v) => { this.plugin.settings.viewFontSize = v; }
+		);
+		const editSizeCtl = createFontSizeRow(
+			splitTextRowsWrap,
+			"Edit text size:",
+			"edit-text-size-input",
+			() => this.plugin.settings.editFontSize || this.plugin.settings.fontSize || 14,
+			(v) => { this.plugin.settings.editFontSize = v; }
+		);
+
+		const updateTextSizeSyncUI = (isSynced: boolean) => {
+			syncTextCheckbox.checked = isSynced;
+			textSizeCtl.slider.disabled = !isSynced;
+			textSizeCtl.input.disabled = !isSynced;
+			splitTextRowsWrap.toggleClass("is-hidden", isSynced);
+		};
+
+		updateTextSizeSyncUI(this.plugin.settings.syncEditTextSize !== false);
+
+		syncTextCheckbox.addEventListener("change", () => {
+			const isSynced = syncTextCheckbox.checked;
+			this.plugin.settings.syncEditTextSize = isSynced;
+			if (!isSynced) {
+				const base = this.plugin.settings.fontSize || 14;
+				if (!this.plugin.settings.viewFontSize) this.plugin.settings.viewFontSize = base;
+				if (!this.plugin.settings.editFontSize) this.plugin.settings.editFontSize = base;
+				viewSizeCtl.slider.value = this.plugin.settings.viewFontSize.toString();
+				viewSizeCtl.input.value = this.plugin.settings.viewFontSize.toString();
+				editSizeCtl.slider.value = this.plugin.settings.editFontSize.toString();
+				editSizeCtl.input.value = this.plugin.settings.editFontSize.toString();
+			}
+			void this.plugin.saveSettings();
+			updateTextSizeSyncUI(isSynced);
+			applyZoomStylesToOpenViews();
+		});
 
 		// Divider 1
 		layoutPopover.createEl("hr", { cls: "fractal-popover-divider" });
@@ -2711,24 +2795,22 @@ export class FractalView extends TextFileView {
 		const palettesContainer = customColorsDiv.createDiv({ cls: "fractal-custom-palettes-container" });
 		
 		const COLOR_PALETTES = [
-			// 1. Scale di nero / grigio scuro (Grayscale Dark - Nero)
-			["#777777", "#555555", "#333333", "#111111", "#000000"],
-			// 2. Scale di bianco / grigio chiaro (Grayscale Light - Bianco)
-			["#FFFFFF", "#D9D9D9", "#B0B0B0", "#999999", "#777777"],
-			// 3. Blu (New Blue)
+			// 1. Neutrals Light -> Cool Slate
+			["#FFFFFF", "#E2E8F0", "#CBD5E1", "#94A3B8", "#64748B"],
+			// 2. Neutrals Mid Grey -> Deep Black
+			["#777777", "#555555", "#333333", "#18181B", "#000000"],
+			// 3. Blue
 			["#B3CDE0", "#6497B1", "#005B96", "#03396C", "#011F4B"],
-			// 4. Verde (New Teal)
-			["#b2dfdb", "#4db6ac", "#009688", "#00796b", "#004d40"],
-			// 5. Rosso (New Red)
-			["#FFBABA", "#FF7B7B", "#FF5252", "#FF0000", "#A70000"],
-			// 6. Warm & Neutral
-			["#F5E3CB", "#E1DCB6", "#E9C386", "#DA895A", "#BD6060"],
-			// 7. Blue/Teal (Classic)
-			["#F1F3F5", "#A9BCC6", "#52C1B9", "#29A9D1", "#004B67"],
-			// 8. Pink/Purple/Blue
-			["#FFE8E8", "#E2F0F9", "#EADBF7", "#E5A1B4", "#414F6E"],
-			// 9. Relax
-			["#FDF8E2", "#FFDDD3", "#F3BFB3", "#9ACDE0", "#5EA9BE"]
+			// 4. Teal
+			["#B2DFDB", "#4DB6AC", "#009688", "#00796B", "#004D40"],
+			// 5. Forest / Sage Green
+			["#D8F3DC", "#95D5B2", "#52B788", "#2D6A4F", "#1B4332"],
+			// 6. Violet / Indigo
+			["#E9D8FD", "#B794F4", "#805AD5", "#553C9A", "#322659"],
+			// 7. Amber / Warm Gold
+			["#FEF3C7", "#FCD34D", "#F59E0B", "#B45309", "#78350F"],
+			// 8. Crimson / Red
+			["#FFBABA", "#FF7B7B", "#FF5252", "#D32F2F", "#8E0000"]
 		];
 
 		COLOR_PALETTES.forEach(palette => {
@@ -2956,7 +3038,13 @@ export class FractalView extends TextFileView {
 			const scaledHeight = inactiveHeight * this.plugin.settings.zoom;
 			container.style.setProperty("--fractal-inactive-card-height", `${scaledHeight}px`);
 		}
-		container.style.setProperty("--fractal-text-size", `${this.plugin.settings.fontSize || 14}px`);
+		const baseFontSize = this.plugin.settings.fontSize || 14;
+		const isTextSynced = this.plugin.settings.syncEditTextSize !== false;
+		const viewFontSize = isTextSynced ? baseFontSize : (this.plugin.settings.viewFontSize || baseFontSize);
+		const editFontSize = isTextSynced ? baseFontSize : (this.plugin.settings.editFontSize || baseFontSize);
+		container.style.setProperty("--fractal-text-size", `${baseFontSize}px`);
+		container.style.setProperty("--fractal-view-text-size", `${viewFontSize}px`);
+		container.style.setProperty("--fractal-edit-text-size", `${editFontSize}px`);
 		container.style.setProperty("--fractal-grid-display", this.plugin.settings.showGrid ? "block" : "none");
 		container.style.setProperty("--fractal-grid-opacity", (this.plugin.settings.gridOpacity !== undefined ? this.plugin.settings.gridOpacity : 0.03).toString());
 		
@@ -5011,7 +5099,20 @@ export class FractalView extends TextFileView {
 			(this.root.content && this.root.content.trim().length > 0);
 
 		const headerEl = nodeEl.createDiv({ cls: "fractal-mindmap-node-header" });
-		headerEl.createDiv({ cls: "fractal-card-title", text: noteTitle });
+		let rootTitleInput: HTMLInputElement | null = null;
+		if (isExpanded && this.editingRootContent) {
+			rootTitleInput = headerEl.createEl("input", {
+				type: "text",
+				cls: "fractal-card-edit-title"
+			});
+			rootTitleInput.value = noteTitle;
+			const stopTitleProp = (e: Event) => e.stopPropagation();
+			rootTitleInput.addEventListener("click", stopTitleProp);
+			rootTitleInput.addEventListener("mousedown", stopTitleProp);
+			rootTitleInput.addEventListener("dblclick", stopTitleProp);
+		} else {
+			headerEl.createDiv({ cls: "fractal-card-title", text: noteTitle });
+		}
 
 		if (!isExpanded) {
 			if (hasRootHiddenText) {
@@ -5116,8 +5217,20 @@ export class FractalView extends TextFileView {
 			editorContainer.addEventListener("mousedown", stopProp);
 			editorContainer.addEventListener("dblclick", stopProp);
 
-			const saveAndExitIntro = (val: string) => {
+			const saveAndExitIntro = async (val: string) => {
 				this.cleanupActiveEditor();
+				if (rootTitleInput && this.file) {
+					const rawName = rootTitleInput.value.trim().replace(/[\\/:*?"<>|]/g, "");
+					if (rawName && rawName !== this.file.basename) {
+						const parentPath = this.file.parent && this.file.parent.path !== "/" ? `${this.file.parent.path}/` : "";
+						const newPath = `${parentPath}${rawName}.md`;
+						try {
+							await this.app.fileManager.renameFile(this.file, newPath);
+						} catch (err) {
+							new Notice(`Could not rename note: ${err instanceof Error ? err.message : String(err)}`);
+						}
+					}
+				}
 				if (this.root.content !== val) {
 					this.pushHistory();
 					this.root.content = val;
@@ -5127,6 +5240,39 @@ export class FractalView extends TextFileView {
 				this.mindMapExpandedNodeId = "root";
 				void this.renderFractal();
 			};
+
+			if (rootTitleInput) {
+				rootTitleInput.addEventListener("keydown", (e) => {
+					if (e.key === "Escape") {
+						e.preventDefault();
+						e.stopPropagation();
+						let val = this.root.content || "";
+						if (this.activeEditorInstance && this.activeEditorInstance.__fractalReady) {
+							try {
+								val = this.activeEditorInstance.getViewData();
+							} catch {
+								val = this.root.content || "";
+							}
+						} else {
+							const rawEditor = editorContainer.querySelector<HTMLTextAreaElement>(".fractal-card-edit-body-raw");
+							if (rawEditor) val = rawEditor.value;
+						}
+						void saveAndExitIntro(val);
+						return;
+					}
+					if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+						e.preventDefault();
+						if (this.activeEditorInstance && this.activeEditorInstance.editor) {
+							this.activeEditorInstance.editor.focus();
+						} else {
+							const rawEditor = editorContainer.querySelector<HTMLElement>(".fractal-card-edit-body-raw");
+							if (rawEditor) rawEditor.focus();
+						}
+						return;
+					}
+					e.stopPropagation();
+				});
+			}
 
 			try {
 				const inlineView = this.createInlineMarkdownEditor(editorContainer, this.root.content || "");
@@ -5142,7 +5288,7 @@ export class FractalView extends TextFileView {
 								val = this.root.content || "";
 							}
 						}
-						saveAndExitIntro(val);
+						void saveAndExitIntro(val);
 					}
 				}, true);
 				saveIntroBtn.addEventListener("click", (e) => {
@@ -5155,10 +5301,14 @@ export class FractalView extends TextFileView {
 							val = this.root.content || "";
 						}
 					}
-					saveAndExitIntro(val);
+					void saveAndExitIntro(val);
 				});
 				window.setTimeout(() => {
-					inlineView.editor?.focus();
+					if (rootTitleInput) {
+						rootTitleInput.focus({ preventScroll: true });
+					} else {
+						inlineView.editor?.focus();
+					}
 				}, 30);
 			} catch {
 				const textarea = editorContainer.createEl("textarea", {
@@ -5169,14 +5319,20 @@ export class FractalView extends TextFileView {
 					if (e.key === "Escape") {
 						e.preventDefault();
 						e.stopPropagation();
-						saveAndExitIntro(textarea.value);
+						void saveAndExitIntro(textarea.value);
 					}
 				});
 				saveIntroBtn.addEventListener("click", (e) => {
 					e.stopPropagation();
-					saveAndExitIntro(textarea.value);
+					void saveAndExitIntro(textarea.value);
 				});
-				window.setTimeout(() => textarea.focus({ preventScroll: true }), 30);
+				window.setTimeout(() => {
+					if (rootTitleInput) {
+						rootTitleInput.focus({ preventScroll: true });
+					} else {
+						textarea.focus({ preventScroll: true });
+					}
+				}, 30);
 			}
 		} else {
 			const introEditBtn = introHeader.createEl("button", {
@@ -5649,6 +5805,15 @@ export default class FractalPlugin extends Plugin {
 		}
 		if (this.settings.showMindMapConnectors === undefined) {
 			this.settings.showMindMapConnectors = true;
+		}
+		if (this.settings.syncEditTextSize === undefined) {
+			this.settings.syncEditTextSize = true;
+		}
+		if (this.settings.viewFontSize === undefined) {
+			this.settings.viewFontSize = this.settings.fontSize || 14;
+		}
+		if (this.settings.editFontSize === undefined) {
+			this.settings.editFontSize = this.settings.fontSize || 14;
 		}
 		if ((this.settings.themeMode as string) === "steel-blue" || (this.settings.themeMode as string) === "classic") {
 			this.settings.themeMode = "obsidian-theme";
