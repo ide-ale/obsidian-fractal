@@ -7,7 +7,7 @@
 
 **Fractal** lets you visualize and edit standard Markdown notes in a **column-based card tree layout** (inspired by Gingko) or a full **Mind-Map view**, mapped directly to your note's Markdown heading hierarchy (`#` through `######`) without modifying your underlying file format.
 
-![Fractal column tree navigation](https://raw.githubusercontent.com/ide-ale/obsidian-fractal/main/docs/media/fractal-columns-navigation.jpg)
+![Fractal column tree navigation in Obsidian Default theme](https://raw.githubusercontent.com/ide-ale/obsidian-fractal/main/docs/media/fractal-columns-navigation.jpg)
 
 ---
 
@@ -24,19 +24,29 @@ Long Markdown documents force you to choose between keeping high-level structure
 
 ## Visual Walkthrough
 
-### Column Navigation & Inline Card Editing
+### Mind-Map View (Full Heading Hierarchy & In-Place Reading)
 
-Browse branches left-to-right, expand active cards, edit directly in place with Obsidian's editor, and switch back to standard Markdown at any time with zero export or conversion.
+Switch to **MindMap** in the top toolbar to see your entire note outline at once (`Note Title Root` → `H1`–`H6`) connected by crisp orthogonal rounded lines with active-branch glow. Section bodies stay hidden for clarity and expand cleanly in place (`Enter` to read, `Enter` again to edit, `Esc` twice to collapse) without overlapping neighboring branches:
 
-![Fractal navigation and inline editing demo](https://raw.githubusercontent.com/ide-ale/obsidian-fractal/main/docs/media/fractal-demo-editing.gif)
+| Compact Overview (`H1`–`H6`) | Expanded Section (`Enter` to Read / Edit) |
+| :---: | :---: |
+| ![Fractal Mind-Map compact overview](https://raw.githubusercontent.com/ide-ale/obsidian-fractal/main/docs/media/fractal-mindmap-overview.jpg) | ![Fractal Mind-Map expanded reading with automatic reflow](https://raw.githubusercontent.com/ide-ale/obsidian-fractal/main/docs/media/fractal-mindmap-expanded.jpg) |
 
-### Rich Markdown Rendering & Layout Workflow
+### Native Obsidian Themes, Community Themes & Custom Palettes
 
-Active cards and illuminated ancestor paths render full Obsidian Markdown—including embedded vault images, callouts, tables, fenced code blocks, and internal links—while unselected sibling cards collapse into concise previews.
+Fractal automatically adapts its canvas, headings, cards, borders, and connectors to Obsidian's **Default theme** and any **third-party community theme** you install (shown below with **Wasp**), or lets you switch to **Custom** mode to pick your own colors for text, titles, canvas, cards, and active aura:
+
+| Community Theme Example (**Wasp**) | Custom Color Palette Mode |
+| :---: | :---: |
+| ![Fractal adapting to the Wasp Obsidian community theme](https://raw.githubusercontent.com/ide-ale/obsidian-fractal/main/docs/media/fractal-theme-wasp.jpg) | ![Fractal Custom color palette visualization](https://raw.githubusercontent.com/ide-ale/obsidian-fractal/main/docs/media/fractal-theme-custom.jpg) |
+
+### Navigation & Inline Card Editing in Action
+
+Browse branches left-to-right, expand active cards with rich Markdown (embedded vault images, callouts, tables, code blocks), and edit directly inside any card using Obsidian's editor:
 
 ![Fractal workflow and structure demo](https://raw.githubusercontent.com/ide-ale/obsidian-fractal/main/docs/media/fractal-demo-workflow.gif)
 
-![Fractal rich card with embedded image and callout](https://raw.githubusercontent.com/ide-ale/obsidian-fractal/main/docs/media/fractal-rich-card-preview.jpg)
+![Fractal navigation and inline editing demo](https://raw.githubusercontent.com/ide-ale/obsidian-fractal/main/docs/media/fractal-demo-editing.gif)
 
 ---
 
